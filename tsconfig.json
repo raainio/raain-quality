@@ -1,0 +1,25 @@
+{
+  "files": [
+    "./src/index.ts"
+  ],
+  "compilerOptions": {
+    "target": "es6",
+    "module": "commonjs",
+    "moduleResolution": "node",
+    "esModuleInterop": true,
+    "declaration": true,
+    "inlineSourceMap": true,
+    "outDir": "./dist/",
+    "lib": [
+      "es6",
+      "dom"
+    ]
+  },
+  "exclude": [
+    "node_modules",
+    "dist",
+    "specs",
+    "coverage",
+    ".coverage"
+  ]
+}
