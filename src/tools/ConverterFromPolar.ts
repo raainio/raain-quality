@@ -89,8 +89,9 @@ export class ConverterFromPolar {
                 const distance2 = distance1 + measureValuePolarContainer.distance;
                 let rate = 0;
 
-                const inStrictly = (a1 <= azimuth1 && azimuth2 <= a2) && (d1 <= distance1 && distance2 <= d2);
-                if (inStrictly) {
+                let inFull = (a1 <= azimuth1 && azimuth2 <= a2) && (d1 <= distance1 && distance2 <= d2);
+                inFull = inFull || (azimuth1 <= a1 && a2 <= azimuth2) && (distance1 <= d1 && d2 <= distance2);
+                if (inFull) {
                     rate = 1;
                 } else {
                     let inPartial = (a1 <= azimuth1 && azimuth1 <= a2) && (d1 <= distance1 && distance1 <= d2);
