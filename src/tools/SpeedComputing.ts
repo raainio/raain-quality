@@ -74,7 +74,7 @@ export class SpeedComputing {
         for (const gaugeHistory of this.gaugeHistories) {
 
             let bestSpeedForGauge;
-            let minDiffValueForGauge;
+            let minDiffValueForGauge = null;
 
             for (let x = 0 - this.rangeGaugeClose; (x <= this.rangeGaugeClose); x++) {
                 for (let y = 0 - this.rangeGaugeClose; (y <= this.rangeGaugeClose); y++) {
@@ -86,7 +86,7 @@ export class SpeedComputing {
                     if (rainHistory) {
                         const diffValue = Math.abs(rainHistory.value - gaugeHistory.value);
 
-                        const isTheBestCloseAreaForNow = minDiffValueForGauge === undefined || minDiffValueForGauge > diffValue;
+                        const isTheBestCloseAreaForNow = minDiffValueForGauge === null || minDiffValueForGauge > diffValue;
 
                         if (isTheBestCloseAreaForNow) {
                             if (!bestSpeedForGauge) {
@@ -132,9 +132,6 @@ export class SpeedComputing {
                                        speed: SpeedComparator): PositionHistory {
 
         const filtered = this.filteredRainHistories.filter(c => {
-            // if (c.value === 5) {
-            //    console.log('exists');
-            // }
             const sameX = c.x === speed.xDiff + gaugeHistory.x;
             const sameY = c.y === speed.yDiff + gaugeHistory.y;
             return sameX && sameY;
@@ -144,11 +141,7 @@ export class SpeedComputing {
             return null;
         }
 
-        const found = filtered[0];
-        // if (found.value === 5) {
-        //     console.log('found');
-        // }
-        return found;
+        return filtered[0];
     }
 
 
