@@ -18,7 +18,6 @@ export class ConverterFromPolar {
         }
     }
 
-
     public static GetLatLngFromPolar(center: LatLng,
                                      polarAzimuthInDegrees: number,
                                      polarDistanceInMeters: number): LatLng {

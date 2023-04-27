@@ -10,7 +10,6 @@ import {PositionHistory} from './history/PositionHistory';
 export class CartesianQuality {
 
     private distanceRatio: number;
-    // private findTheClosestGaugeMeasure;
     private rainComputationQuality: RainComputationQuality;
 
     constructor(
@@ -19,10 +18,6 @@ export class CartesianQuality {
     ) {
         this.distanceRatio = 1 / 100;
     }
-
-    // public setFunctionToFindTheClosestGaugeMeasure(fn) {
-    //    this.findTheClosestGaugeMeasure = fn;
-    // }
 
     public async getRainComputationQuality(): Promise<RainComputationQuality> {
 

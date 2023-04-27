@@ -9,8 +9,25 @@ export class QualityTools {
         return -1;
     }
 
+    public static precision(a) {
+        if (!isFinite(a)) {
+            return 0;
+        }
+        let e = 1, p = 0;
+        while (Math.round(a * e) / e !== a) {
+            e *= 10;
+            p++;
+        }
+        return p;
+    }
+
     public static roundLatLng(value: number, cartesianStep = 0.01): number {
-        return Math.round(value / cartesianStep) * cartesianStep;
+        // return value.toFixed(2);
+        const decimalPlaces = 2;
+        // return Math.round((value + Number.EPSILON) / cartesianStep) * cartesianStep;
+        const p = Math.pow(10, decimalPlaces || 0);
+        const n = (value * p) * (1 + Number.EPSILON);
+        return Math.round(n) / p;
     }
 
     public static isEqualsLatLng(value1: number, value2: number, cartesianStep = 0.01): boolean {
