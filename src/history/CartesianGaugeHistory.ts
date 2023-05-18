@@ -1,6 +1,5 @@
 import {CartesianValue} from 'raain-model';
 
-
 export class CartesianGaugeHistory {
     constructor(
         public gaugeId: string,

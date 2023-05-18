@@ -25,6 +25,31 @@ export class CartesianQuality {
             return this.rainComputationQuality;
         }
 
+        this.rainComputationQuality = new RainComputationQuality(
+            'in progress...',
+            null, null,
+            [],
+            0,
+            0,
+            'none',
+            {rainMeasureValue: undefined, gaugeMeasureValue: undefined},
+            {angleDegrees: 0, speedMetersPerSec: 0},
+            [],
+            0);
+
+        if (this.cartesianRainHistories.length === 0) {
+            console.warn('no cartesianRainHistory => impossible to compute quality');
+            // @ts-ignore
+            this.rainComputationQuality['id'] = 'no cartesianRainHistory';
+            return this.rainComputationQuality;
+        }
+        if (this.cartesianGaugeHistories.length === 0) {
+            console.warn('no cartesianGaugeHistory => impossible to compute quality');
+            // @ts-ignore
+            this.rainComputationQuality['id'] = 'no cartesianGaugeHistory';
+            return this.rainComputationQuality;
+        }
+
         const gaugeHistories = [];
         for (const cartesianGaugeHistory of this.cartesianGaugeHistories) {
             gaugeHistories.push(new PositionHistory(
@@ -54,13 +79,20 @@ export class CartesianQuality {
         for (const cartesianGaugeHistory of this.cartesianGaugeHistories) {
 
             const cartesianRainHistoryTranslated = this.getAssociatedRainCartesianHistory(cartesianGaugeHistory, speed);
+            if (cartesianRainHistoryTranslated === null) {
+                const message = 'No rain history corresponding to gauge, probably a data mismatch ? ('
+                    + cartesianGaugeHistory.value.lat + ',' + cartesianGaugeHistory.value.lng + ') vs ('
+                    + this.cartesianRainHistories[0]?.computedValue.lat + ',' + this.cartesianRainHistories[0]?.computedValue.lng + ')';
+                // throw Error(message);
+                console.warn(message);
+            } else {
+                const point = new QualityPoint(cartesianGaugeHistory.gaugeId,
+                    cartesianRainHistoryTranslated.computedValue,
+                    cartesianGaugeHistory.value);
 
-            const point = new QualityPoint(cartesianGaugeHistory.gaugeId,
-                cartesianRainHistoryTranslated.computedValue,
-                cartesianGaugeHistory.value);
-
-            this.storeMaximums(maximums, point);
-            points.push(point);
+                this.storeMaximums(maximums, point);
+                points.push(point);
+            }
         }
 
 
