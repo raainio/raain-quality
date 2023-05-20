@@ -40,22 +40,20 @@ export class SpeedComputing {
             const cartesianGaugeHistory = this.gaugeHistories[0];
             diffTimeBetweenGaugeAndRain = cartesianGaugeHistory.date.getTime() - cartesianRainHistory.date.getTime();
         }
-        speedComparator.convertSpeed(this.distanceRatio, diffTimeBetweenGaugeAndRain);
+        speedComparator.convertSpeed(diffTimeBetweenGaugeAndRain);
 
         return speedComparator;
     }
 
     protected speedOnEachLargeArea(): SpeedComparator {
 
-        const speedComparator = new SpeedComparator();
-        speedComparator.positionGeoRatio = this.distanceRatio;
-        speedComparator.deltaSum = -1;
-        speedComparator.distanceSum = -1;
+        const speedComparator = new SpeedComparator(-1, -1, 0, 0, this.distanceRatio);
 
         for (let x = 0 - this.rangeGaugeLarge; x <= this.rangeGaugeLarge; x++) {
             for (let y = 0 - this.rangeGaugeLarge; y <= this.rangeGaugeLarge; y++) {
 
-                let bestSpeedComparator = new SpeedComparator(speedComparator.deltaSum, speedComparator.distanceSum, x, y);
+                let bestSpeedComparator = new SpeedComparator(
+                    speedComparator.deltaSum, speedComparator.distanceSum, x, y, this.distanceRatio);
                 bestSpeedComparator = this.getTheBestSpeed(speedComparator, bestSpeedComparator);
 
                 speedComparator.xDiff = bestSpeedComparator.xDiff;
@@ -80,7 +78,7 @@ export class SpeedComputing {
                 for (let y = 0 - this.rangeGaugeClose; (y <= this.rangeGaugeClose); y++) {
 
                     const speedBetweenCenter = new SpeedComparator(0, 0,
-                        x + challengedSpeed.xDiff, y + challengedSpeed.yDiff);
+                        x + challengedSpeed.xDiff, y + challengedSpeed.yDiff, this.distanceRatio);
                     const rainHistory = this.getAssociatedRainHistory(gaugeHistory, speedBetweenCenter);
 
                     if (rainHistory) {
@@ -90,7 +88,7 @@ export class SpeedComputing {
 
                         if (isTheBestCloseAreaForNow) {
                             if (!bestSpeedForGauge) {
-                                bestSpeedForGauge = new SpeedComparator();
+                                bestSpeedForGauge = new SpeedComparator(0, 0, 0, 0, this.distanceRatio);
                             }
 
                             minDiffValueForGauge = diffValue;

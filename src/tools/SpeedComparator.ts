@@ -8,13 +8,14 @@ export class SpeedComparator {
         public distanceSum: number = 0,
         public xDiff: number = 0,
         public yDiff: number = 0,
-        public speedMetersPerSec: number = 0,
-        public angleDegrees: number = 0,
         public positionGeoRatio: number = 1
     ) {
     }
 
-    public convertSpeed(positionRatio: number, timeInMilliSec: number) {
+    public speedMetersPerSec = 0;
+    public angleDegrees = 0;
+
+    public convertSpeed(timeInMilliSec: number) {
 
         if (timeInMilliSec === 0) {
             return;
@@ -22,12 +23,15 @@ export class SpeedComparator {
 
         this.angleDegrees = getRhumbLineBearing(
             {latitude: 0, longitude: 0},
-            {latitude: this.xDiff * positionRatio, longitude: this.yDiff * positionRatio}
+            {latitude: this.xDiff * this.positionGeoRatio, longitude: this.yDiff * this.positionGeoRatio}
         );
         this.speedMetersPerSec = getSpeed(
             {latitude: 0, longitude: 0, time: 0},
-            {latitude: this.xDiff * positionRatio, longitude: this.yDiff * positionRatio, time: timeInMilliSec}
+            {latitude: this.xDiff * this.positionGeoRatio, longitude: this.yDiff * this.positionGeoRatio, time: timeInMilliSec}
         );
+
+        // this.speedMetersPerSec = this.getDistanceBetweenZero() * 100 * 1000 * 1000 / timeInMilliSec;
+
     }
 
     public getLatitudeDiff(): number {
@@ -39,7 +43,7 @@ export class SpeedComparator {
     }
 
     public getDistanceBetweenZero(): number {
-        return Math.sqrt(Math.pow(this.xDiff, 2) + Math.pow(this.yDiff, 2));
+        return Math.sqrt(Math.pow(this.xDiff, 2) + Math.pow(this.yDiff, 2)) * this.positionGeoRatio;
     }
 
 

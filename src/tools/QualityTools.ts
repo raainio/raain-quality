@@ -1,3 +1,5 @@
+import {CartesianQuality} from '../CartesianQuality';
+
 export class QualityTools {
 
     public static indexOfDualArray(array, itemToFind) {
@@ -21,7 +23,7 @@ export class QualityTools {
         return p;
     }
 
-    public static roundLatLng(value: number, cartesianStep = 0.01): number {
+    public static roundLatLng(value: number, cartesianStep = CartesianQuality.DEFAULT_SCALE): number {
         // return value.toFixed(2);
         const decimalPlaces = 2;
         // return Math.round((value + Number.EPSILON) / cartesianStep) * cartesianStep;
@@ -30,7 +32,7 @@ export class QualityTools {
         return Math.round(n) / p;
     }
 
-    public static isEqualsLatLng(value1: number, value2: number, cartesianStep = 0.01): boolean {
+    public static isEqualsLatLng(value1: number, value2: number, cartesianStep = CartesianQuality.DEFAULT_SCALE): boolean {
         return QualityTools.roundLatLng(value1, cartesianStep) === QualityTools.roundLatLng(value2, cartesianStep);
     }
 

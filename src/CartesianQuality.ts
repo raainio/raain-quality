@@ -9,15 +9,16 @@ import {PositionHistory} from './history/PositionHistory';
 
 export class CartesianQuality {
 
-    private distanceRatio: number;
-    private rainComputationQuality: RainComputationQuality;
-
     constructor(
         protected cartesianRainHistories: CartesianRainHistory[],
         protected cartesianGaugeHistories: CartesianGaugeHistory[],
+        private distanceRatio = CartesianQuality.DEFAULT_SCALE
     ) {
-        this.distanceRatio = 1 / 100;
     }
+
+    public static DEFAULT_SCALE = 0.01;
+
+    private rainComputationQuality: RainComputationQuality;
 
     public async getRainComputationQuality(): Promise<RainComputationQuality> {
 
@@ -78,7 +79,7 @@ export class CartesianQuality {
         const points: QualityPoint[] = [];
         for (const cartesianGaugeHistory of this.cartesianGaugeHistories) {
 
-            const cartesianRainHistoryTranslated = this.getAssociatedRainCartesianHistory(cartesianGaugeHistory, speed);
+            const cartesianRainHistoryTranslated = this.getAssociatedRainCartesianHistory(cartesianGaugeHistory, speed, this.distanceRatio);
             if (cartesianRainHistoryTranslated === null) {
                 const message = 'No rain history corresponding to gauge, probably a data mismatch ? ('
                     + cartesianGaugeHistory.value.lat + ',' + cartesianGaugeHistory.value.lng + ') vs ('
@@ -144,20 +145,23 @@ export class CartesianQuality {
     }
 
     private computeSpeed(rainHistories: PositionHistory[], gaugeHistories: PositionHistory[]): SpeedComparator {
-        const speedComputing = new SpeedComputing(rainHistories, gaugeHistories, 1 / 100);
+        const speedComputing = new SpeedComputing(rainHistories, gaugeHistories, this.distanceRatio);
         return speedComputing.computeSpeed();
     }
 
     private getAssociatedRainCartesianHistory(cartesianGaugeHistory: CartesianGaugeHistory,
-                                              speed: SpeedComparator): CartesianRainHistory {
+                                              speed: SpeedComparator,
+                                              scale = CartesianQuality.DEFAULT_SCALE): CartesianRainHistory {
 
         const filtered = this.cartesianRainHistories.filter(c => {
             const sameLat = QualityTools.isEqualsLatLng(
                 c.computedValue.lat,
-                speed.getLatitudeDiff() + cartesianGaugeHistory.value.lat);
+                speed.getLatitudeDiff() + cartesianGaugeHistory.value.lat,
+                scale);
             const sameLng = QualityTools.isEqualsLatLng(
                 c.computedValue.lng,
-                speed.getLongitudeDiff() + cartesianGaugeHistory.value.lng);
+                speed.getLongitudeDiff() + cartesianGaugeHistory.value.lng,
+                scale);
             return sameLat && sameLng;
         });
         return filtered && filtered.length === 1 ? filtered[0] : null;

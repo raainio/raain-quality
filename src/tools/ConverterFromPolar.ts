@@ -2,6 +2,7 @@ import {CartesianValue, IPolarMeasureValue} from 'raain-model';
 import {computeDestinationPoint, getBoundsOfDistance, getDistance, getRhumbLineBearing} from 'geolib';
 import {QualityTools} from './QualityTools';
 import {LatLng} from './LatLng';
+import {CartesianQuality} from '../CartesianQuality';
 
 export class ConverterFromPolar {
 
@@ -9,7 +10,7 @@ export class ConverterFromPolar {
 
     constructor(protected center: LatLng,
                 protected polarMeasureValue: IPolarMeasureValue,
-                protected latLngPointWidth = 0.01) {
+                protected latLngPointWidth = CartesianQuality.DEFAULT_SCALE) {
 
         const measureValuePolarContainers = this.polarMeasureValue.getPolars();
         this.azimuthDelta = 0;
@@ -29,7 +30,12 @@ export class ConverterFromPolar {
         return new LatLng(dest.latitude, dest.longitude);
     }
 
-    public static CartesianSquare(point: LatLng, cartesianStep = 0.01): { p1: LatLng, p2: LatLng, p3: LatLng, p4: LatLng } {
+    public static CartesianSquare(point: LatLng, cartesianStep = CartesianQuality.DEFAULT_SCALE): {
+        p1: LatLng,
+        p2: LatLng,
+        p3: LatLng,
+        p4: LatLng
+    } {
 
         const distanceInMeters = getDistance(new LatLng(0, 0), new LatLng(cartesianStep, 0));
         const bounds = getBoundsOfDistance(point, distanceInMeters);

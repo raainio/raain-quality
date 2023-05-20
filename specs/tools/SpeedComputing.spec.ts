@@ -126,6 +126,29 @@ describe('SpeedComputing', () => {
         expect(speedComparator.angleDegrees).eq(0);
         expect(speedComparator.speedMetersPerSec).eq(5622191.919191919);
 
-    }).timeout(20000);
+    });
+
+
+    it('should get speed(5,0) (divided by ratio) for 4 gauges with a different distanceRatio', () => {
+
+        // Prepare scenario : full map with 4 gauges
+        const scenario = getPreparedScenario(100, 5, 4);
+
+        // Compute the speed
+        console.log(new Date().toISOString(), 'begin');
+        const speedComputing = new SpeedComputing(scenario.rainHistories, scenario.gaugeHistories, 0.1, 8, 2);
+        const speedComparator = speedComputing.computeSpeed();
+        console.log(new Date().toISOString(), 'end');
+
+        // Verify results
+        expect(speedComparator.deltaSum).eq(0);
+        expect(speedComparator.distanceSum).eq(0);
+        expect(speedComparator.xDiff).eq(5);
+        expect(speedComparator.yDiff).eq(0);
+        expect(speedComparator.positionGeoRatio).eq(0.1);
+        expect(speedComparator.angleDegrees).eq(0);
+        expect(speedComparator.speedMetersPerSec).eq(562222.2222222221);
+
+    });
 
 });

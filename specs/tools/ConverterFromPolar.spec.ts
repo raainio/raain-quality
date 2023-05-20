@@ -1,12 +1,11 @@
 import {expect} from 'chai';
 import {MeasureValuePolarContainer, PolarMeasureValue} from 'raain-model';
-import {ConverterFromPolar, LatLng} from '../../src/';
+import {CartesianQuality, ConverterFromPolar, LatLng} from '../../src/';
 
 
 describe('ConverterFromPolar', () => {
 
     const DISTANCE = 1500;
-    const CARTESIAN_STEP = 0.01;
 
     function getPreparedScenario() {
 
@@ -31,7 +30,7 @@ describe('ConverterFromPolar', () => {
     it('should get cartesianSquare', () => {
 
         let center = new LatLng(1, 1);
-        let square = ConverterFromPolar.CartesianSquare(center, CARTESIAN_STEP);
+        let square = ConverterFromPolar.CartesianSquare(center, CartesianQuality.DEFAULT_SCALE);
         expect(square.p1.lat).eq(1);
         expect(square.p1.lng).eq(1);
         expect(square.p2.lat).eq(1.01);
@@ -42,7 +41,7 @@ describe('ConverterFromPolar', () => {
         expect(square.p4.lng).eq(1);
 
         center = new LatLng(1.005, 1);
-        square = ConverterFromPolar.CartesianSquare(center, CARTESIAN_STEP);
+        square = ConverterFromPolar.CartesianSquare(center, CartesianQuality.DEFAULT_SCALE);
         expect(square.p1.lat).eq(1);
         expect(square.p1.lng).eq(1);
         expect(square.p2.lat).eq(1.01);
@@ -53,7 +52,7 @@ describe('ConverterFromPolar', () => {
         expect(square.p4.lng).eq(1);
 
         center = new LatLng(1.005, 1.005);
-        square = ConverterFromPolar.CartesianSquare(center, CARTESIAN_STEP);
+        square = ConverterFromPolar.CartesianSquare(center, CartesianQuality.DEFAULT_SCALE);
         expect(square.p1.lat).eq(1);
         expect(square.p1.lng).eq(1);
         expect(square.p2.lat).eq(1.01);
@@ -64,7 +63,7 @@ describe('ConverterFromPolar', () => {
         expect(square.p4.lng).eq(1);
 
         center = new LatLng(1.005, 0.995);
-        square = ConverterFromPolar.CartesianSquare(center, CARTESIAN_STEP);
+        square = ConverterFromPolar.CartesianSquare(center, CartesianQuality.DEFAULT_SCALE);
         expect(square.p1.lat).eq(1);
         expect(square.p1.lng).eq(0.99);
         expect(square.p2.lat).eq(1.01);
