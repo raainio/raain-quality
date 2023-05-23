@@ -61,7 +61,7 @@ describe('SpeedComputing', () => {
         expect(speedComparator.xDiff).eq(0);
         expect(speedComparator.yDiff).eq(0);
         expect(speedComparator.positionGeoRatio).eq(1);
-        expect(speedComparator.speedMetersPerSec).eq(0);
+        expect(speedComparator.speedNormalized).eq(0);
         expect(speedComparator.angleDegrees).eq(0);
 
     });
@@ -81,7 +81,7 @@ describe('SpeedComputing', () => {
         expect(speedComparator.xDiff).eq(0);
         expect(speedComparator.yDiff).eq(0);
         expect(speedComparator.positionGeoRatio).eq(1);
-        expect(speedComparator.speedMetersPerSec).eq(0);
+        expect(speedComparator.speedNormalized).eq(0);
         expect(speedComparator.angleDegrees).eq(0);
 
     });
@@ -102,7 +102,7 @@ describe('SpeedComputing', () => {
         expect(speedComparator.yDiff).eq(0);
         expect(speedComparator.positionGeoRatio).eq(1);
         expect(speedComparator.angleDegrees).eq(0);
-        expect(speedComparator.speedMetersPerSec).eq(37106444.44444445);
+        expect(speedComparator.speedNormalized).eq(37106444.44444445);
 
     });
 
@@ -124,7 +124,7 @@ describe('SpeedComputing', () => {
         expect(speedComparator.yDiff).eq(0);
         expect(speedComparator.positionGeoRatio).eq(1);
         expect(speedComparator.angleDegrees).eq(0);
-        expect(speedComparator.speedMetersPerSec).eq(5622191.919191919);
+        expect(speedComparator.speedNormalized).eq(5622191.919191919);
 
     });
 
@@ -147,7 +147,7 @@ describe('SpeedComputing', () => {
         expect(speedComparator.yDiff).eq(0);
         expect(speedComparator.positionGeoRatio).eq(0.1);
         expect(speedComparator.angleDegrees).eq(0);
-        expect(speedComparator.speedMetersPerSec).eq(562222.2222222221);
+        expect(speedComparator.speedNormalized).eq(562222.2222222221);
 
     });
 

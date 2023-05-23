@@ -1,4 +1,3 @@
-import {getRhumbLineBearing, getSpeed} from 'geolib';
 import {QualityTools} from './QualityTools';
 
 export class SpeedComparator {
@@ -7,43 +6,39 @@ export class SpeedComparator {
         public deltaSum: number = 0,
         public distanceSum: number = 0,
         public xDiff: number = 0,
-        public yDiff: number = 0,
-        public positionGeoRatio: number = 1
+        public yDiff: number = 0
     ) {
     }
 
-    public speedMetersPerSec = 0;
+    public speedNormalized = 0;
     public angleDegrees = 0;
 
-    public convertSpeed(timeInMilliSec: number) {
+    public convertSpeed(time: number) {
 
-        if (timeInMilliSec === 0) {
+        if (time === 0) {
             return;
         }
 
-        this.angleDegrees = getRhumbLineBearing(
-            {latitude: 0, longitude: 0},
-            {latitude: this.xDiff * this.positionGeoRatio, longitude: this.yDiff * this.positionGeoRatio}
-        );
-        this.speedMetersPerSec = getSpeed(
-            {latitude: 0, longitude: 0, time: 0},
-            {latitude: this.xDiff * this.positionGeoRatio, longitude: this.yDiff * this.positionGeoRatio, time: timeInMilliSec}
-        );
-
-        // this.speedMetersPerSec = this.getDistanceBetweenZero() * 100 * 1000 * 1000 / timeInMilliSec;
-
+        this.speedNormalized = this.getDistanceBetweenZero() / time;
+        this.angleDegrees = this.getAngleBetweenZero();
     }
 
-    public getLatitudeDiff(): number {
-        return QualityTools.roundLatLng(this.xDiff * this.positionGeoRatio);
+    public getLatitudeDiff(positionGeoRatio): number {
+        return QualityTools.roundLatLng(this.xDiff * positionGeoRatio);
     }
 
-    public getLongitudeDiff(): number {
-        return QualityTools.roundLatLng(this.yDiff * this.positionGeoRatio);
+    public getLongitudeDiff(positionGeoRatio): number {
+        return QualityTools.roundLatLng(this.yDiff * positionGeoRatio);
     }
 
     public getDistanceBetweenZero(): number {
-        return Math.sqrt(Math.pow(this.xDiff, 2) + Math.pow(this.yDiff, 2)) * this.positionGeoRatio;
+        return Math.sqrt(Math.pow(this.xDiff, 2) + Math.pow(this.yDiff, 2));
+    }
+
+    public getAngleBetweenZero(): number {
+        let angle = Math.atan2(this.yDiff, this.xDiff);
+        angle = angle * 180 / Math.PI;
+        return angle;
     }
 
 

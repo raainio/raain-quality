@@ -47,13 +47,13 @@ export class SpeedComputing {
 
     protected speedOnEachLargeArea(): SpeedComparator {
 
-        const speedComparator = new SpeedComparator(-1, -1, 0, 0, this.distanceRatio);
+        const speedComparator = new SpeedComparator(-1, -1, 0, 0);
 
         for (let x = 0 - this.rangeGaugeLarge; x <= this.rangeGaugeLarge; x++) {
             for (let y = 0 - this.rangeGaugeLarge; y <= this.rangeGaugeLarge; y++) {
 
                 let bestSpeedComparator = new SpeedComparator(
-                    speedComparator.deltaSum, speedComparator.distanceSum, x, y, this.distanceRatio);
+                    speedComparator.deltaSum, speedComparator.distanceSum, x, y);
                 bestSpeedComparator = this.getTheBestSpeed(speedComparator, bestSpeedComparator);
 
                 speedComparator.xDiff = bestSpeedComparator.xDiff;
@@ -78,7 +78,7 @@ export class SpeedComputing {
                 for (let y = 0 - this.rangeGaugeClose; (y <= this.rangeGaugeClose); y++) {
 
                     const speedBetweenCenter = new SpeedComparator(0, 0,
-                        x + challengedSpeed.xDiff, y + challengedSpeed.yDiff, this.distanceRatio);
+                        x + challengedSpeed.xDiff, y + challengedSpeed.yDiff);
                     const rainHistory = this.getAssociatedRainHistory(gaugeHistory, speedBetweenCenter);
 
                     if (rainHistory) {
@@ -88,7 +88,7 @@ export class SpeedComputing {
 
                         if (isTheBestCloseAreaForNow) {
                             if (!bestSpeedForGauge) {
-                                bestSpeedForGauge = new SpeedComparator(0, 0, 0, 0, this.distanceRatio);
+                                bestSpeedForGauge = new SpeedComparator(0, 0, 0, 0);
                             }
 
                             minDiffValueForGauge = diffValue;
@@ -110,7 +110,7 @@ export class SpeedComputing {
         let distanceSum = 0;
         for (const gaugeSpeed of gaugesSpeed) {
             deltaSum += gaugeSpeed.deltaSum;
-            distanceSum += gaugeSpeed.distanceSum;// gaugeSpeed.getDistanceBetweenZero();
+            distanceSum += gaugeSpeed.distanceSum;
         }
 
         const isTheBestForNow = challengedSpeed.deltaSum < 0 || challengedSpeed.deltaSum > deltaSum

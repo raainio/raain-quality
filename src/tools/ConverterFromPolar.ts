@@ -86,12 +86,32 @@ export class ConverterFromPolar {
         // get the list of the point's attached polar values
         const polarValuesLinkedToPoint: { value: number, rate: number }[] = [];
 
-        measureValuePolarContainers.forEach(measureValuePolarContainer => {
-            measureValuePolarContainer.polarEdges.forEach((polarEdge, index) => {
-                const azimuth1 = measureValuePolarContainer.azimuth;
-                const azimuth2 = measureValuePolarContainer.azimuth + this.azimuthDelta;
+        const filteredMeasureValuePolarContainers = measureValuePolarContainers.filter(measureValuePolarContainer => {
+            const azimuth1 = measureValuePolarContainer.azimuth;
+            const azimuth2 = measureValuePolarContainer.azimuth + this.azimuthDelta;
+            let outFull = (a1 > azimuth1 && a1 > azimuth2) || (a2 < azimuth1 && a2 < azimuth2);
+            outFull = outFull || (measureValuePolarContainer.distance * measureValuePolarContainer.polarEdges.length < d1);
+            return !outFull;
+        });
+
+        filteredMeasureValuePolarContainers.forEach(measureValuePolarContainer => {
+            const azimuth1 = measureValuePolarContainer.azimuth;
+            const azimuth2 = measureValuePolarContainer.azimuth + this.azimuthDelta;
+
+            let filteredPolarEdges = measureValuePolarContainer.polarEdges.map((polarEdge, index) => {
                 const distance1 = measureValuePolarContainer.distance * index;
                 const distance2 = distance1 + measureValuePolarContainer.distance;
+                return {polarEdge, distance1, distance2};
+            });
+
+            filteredPolarEdges = filteredPolarEdges.filter(v => {
+                const outFull = (d1 > v.distance1 && d1 > v.distance2) || (d2 < v.distance1 && d2 < v.distance2);
+                return !outFull;
+            });
+
+            filteredPolarEdges.forEach((v) => {
+                const distance1 = v.distance1;
+                const distance2 = v.distance2;
                 let rate = 0;
 
                 let inFull = (a1 <= azimuth1 && azimuth2 <= a2) && (d1 <= distance1 && distance2 <= d2);
@@ -109,7 +129,7 @@ export class ConverterFromPolar {
                 }
 
                 if (rate) {
-                    polarValuesLinkedToPoint.push({value: polarEdge, rate});
+                    polarValuesLinkedToPoint.push({value: v.polarEdge, rate});
                 }
             });
         });

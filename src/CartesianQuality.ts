@@ -39,13 +39,13 @@ export class CartesianQuality {
             0);
 
         if (this.cartesianRainHistories.length === 0) {
-            console.warn('no cartesianRainHistory => impossible to compute quality');
+            console.warn('>> raain-quality ### no cartesianRainHistory => impossible to compute quality');
             // @ts-ignore
             this.rainComputationQuality['id'] = 'no cartesianRainHistory';
             return this.rainComputationQuality;
         }
         if (this.cartesianGaugeHistories.length === 0) {
-            console.warn('no cartesianGaugeHistory => impossible to compute quality');
+            console.warn('>> raain-quality ### no cartesianGaugeHistory => impossible to compute quality');
             // @ts-ignore
             this.rainComputationQuality['id'] = 'no cartesianGaugeHistory';
             return this.rainComputationQuality;
@@ -81,7 +81,7 @@ export class CartesianQuality {
 
             const cartesianRainHistoryTranslated = this.getAssociatedRainCartesianHistory(cartesianGaugeHistory, speed, this.distanceRatio);
             if (cartesianRainHistoryTranslated === null) {
-                const message = 'No rain history corresponding to gauge, probably a data mismatch ? ('
+                const message = '>> raain-quality ### No rain history corresponding to gauge, probably a data mismatch ? ('
                     + cartesianGaugeHistory.value.lat + ',' + cartesianGaugeHistory.value.lng + ') vs ('
                     + this.cartesianRainHistories[0]?.computedValue.lat + ',' + this.cartesianRainHistories[0]?.computedValue.lng + ')';
                 // throw Error(message);
@@ -107,7 +107,10 @@ export class CartesianQuality {
 
         delete speed.xDiff;
         delete speed.yDiff;
-        this.rainComputationQuality.speed = speed;
+        this.rainComputationQuality.speed = {
+            angleDegrees: speed.angleDegrees,
+            speedMetersPerSec: speed.speedNormalized * 1000 * (this.distanceRatio * 100000) // 1 lat = approx. 100km => 100 000m)
+        };
         this.rainComputationQuality.maximums = maximums;
         this.rainComputationQuality.points = points;
         this.rainComputationQuality.indicator = this.computeQualityIndicator(points);
@@ -156,11 +159,11 @@ export class CartesianQuality {
         const filtered = this.cartesianRainHistories.filter(c => {
             const sameLat = QualityTools.isEqualsLatLng(
                 c.computedValue.lat,
-                speed.getLatitudeDiff() + cartesianGaugeHistory.value.lat,
+                speed.getLatitudeDiff(scale) + cartesianGaugeHistory.value.lat,
                 scale);
             const sameLng = QualityTools.isEqualsLatLng(
                 c.computedValue.lng,
-                speed.getLongitudeDiff() + cartesianGaugeHistory.value.lng,
+                speed.getLongitudeDiff(scale) + cartesianGaugeHistory.value.lng,
                 scale);
             return sameLat && sameLng;
         });
