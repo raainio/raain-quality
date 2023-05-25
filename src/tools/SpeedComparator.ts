@@ -24,11 +24,11 @@ export class SpeedComparator {
     }
 
     public getLatitudeDiff(positionGeoRatio): number {
-        return QualityTools.roundLatLng(this.xDiff * positionGeoRatio);
+        return QualityTools.roundLatLng(this.xDiff * positionGeoRatio, positionGeoRatio);
     }
 
     public getLongitudeDiff(positionGeoRatio): number {
-        return QualityTools.roundLatLng(this.yDiff * positionGeoRatio);
+        return QualityTools.roundLatLng(this.yDiff * positionGeoRatio, positionGeoRatio);
     }
 
     public getDistanceBetweenZero(): number {

@@ -6,6 +6,7 @@ import {SpeedComparator} from './tools/SpeedComparator';
 import {SpeedComputing} from './tools/SpeedComputing';
 import {QualityPoint} from './tools/QualityPoint';
 import {PositionHistory} from './history/PositionHistory';
+import {LatLng} from './tools/LatLng';
 
 export class CartesianQuality {
 
@@ -18,7 +19,34 @@ export class CartesianQuality {
 
     public static DEFAULT_SCALE = 0.01;
 
+    public static DEFAULT_AROUND_RANGE = 8;
+
     private rainComputationQuality: RainComputationQuality;
+
+    public static GetBestAssociatedRainCartesianHistory(cartesianGaugeHistory: CartesianGaugeHistory,
+                                                        cartesianRainHistories: CartesianRainHistory[],
+                                                        scale = CartesianQuality.DEFAULT_SCALE): CartesianRainHistory {
+        let minDelta = null;
+        let bestCartesianRainHistory = null;
+        cartesianRainHistories.forEach(c => {
+            const samePeriod = c.periodBegin.getTime() < cartesianGaugeHistory.date.getTime()
+                && cartesianGaugeHistory.date.getTime() <= c.periodEnd.getTime();
+
+            const isNear = QualityTools.isAroundLatLng(
+                new LatLng(cartesianGaugeHistory.value.lat, cartesianGaugeHistory.value.lng),
+                new LatLng(c.computedValue.lat, c.computedValue.lng),
+                CartesianQuality.DEFAULT_AROUND_RANGE, scale);
+
+            const delta = Math.abs(c.computedValue.value - cartesianGaugeHistory.value.value);
+            const isOneBestValue = minDelta === null || minDelta > delta;
+
+            if (isNear && samePeriod && isOneBestValue) {
+                minDelta = delta;
+                bestCartesianRainHistory = c;
+            }
+        });
+        return bestCartesianRainHistory;
+    }
 
     public async getRainComputationQuality(): Promise<RainComputationQuality> {
 
@@ -51,40 +79,44 @@ export class CartesianQuality {
             return this.rainComputationQuality;
         }
 
-        const gaugeHistories = [];
-        for (const cartesianGaugeHistory of this.cartesianGaugeHistories) {
-            gaugeHistories.push(new PositionHistory(
-                cartesianGaugeHistory.gaugeId,
-                cartesianGaugeHistory.date,
-                Math.round(cartesianGaugeHistory.value.lat / this.distanceRatio),
-                Math.round(cartesianGaugeHistory.value.lng / this.distanceRatio),
-                cartesianGaugeHistory.value.value));
-        }
-
-        const rainHistories = [];
         const dates = {minDate: undefined, maxDate: undefined};
-        for (const cartesianRainHistory of this.cartesianRainHistories) {
-            this.storeDates(dates, cartesianRainHistory);
-            rainHistories.push(new PositionHistory(
-                'rain' + rainHistories.length,
-                cartesianRainHistory.periodBegin,
-                Math.round(cartesianRainHistory.computedValue.lat / this.distanceRatio),
-                Math.round(cartesianRainHistory.computedValue.lng / this.distanceRatio),
-                cartesianRainHistory.computedValue.value));
-        }
 
-        const speed = this.computeSpeed(rainHistories, gaugeHistories);
+        const cartesianRainHistoriesFiltered = this.cartesianRainHistories.filter(cartesianRainHistory => {
+            this.storeDates(dates, cartesianRainHistory);
+
+            let outOfAllGauges = true;
+            for (const cartesianGaugeHistory of this.cartesianGaugeHistories) {
+                if (QualityTools.isNotAroundLatLng(
+                    new LatLng(cartesianGaugeHistory.value.lat, cartesianGaugeHistory.value.lng),
+                    new LatLng(cartesianRainHistory.computedValue.lat, cartesianRainHistory.computedValue.lng),
+                    CartesianQuality.DEFAULT_AROUND_RANGE,
+                    this.distanceRatio)) {
+                    outOfAllGauges = outOfAllGauges && true;
+                } else {
+                    return true;
+                }
+            }
+            return !outOfAllGauges;
+        });
 
         const maximums = {rainMeasureValue: undefined, gaugeMeasureValue: undefined};
         const points: QualityPoint[] = [];
         for (const cartesianGaugeHistory of this.cartesianGaugeHistories) {
 
-            const cartesianRainHistoryTranslated = this.getAssociatedRainCartesianHistory(cartesianGaugeHistory, speed, this.distanceRatio);
+            const cartesianRainHistoryTranslated = CartesianQuality.GetBestAssociatedRainCartesianHistory(
+                cartesianGaugeHistory, cartesianRainHistoriesFiltered, this.distanceRatio);
             if (cartesianRainHistoryTranslated === null) {
-                const message = '>> raain-quality ### No rain history corresponding to gauge, probably a data mismatch ? ('
-                    + cartesianGaugeHistory.value.lat + ',' + cartesianGaugeHistory.value.lng + ') vs ('
-                    + this.cartesianRainHistories[0]?.computedValue.lat + ',' + this.cartesianRainHistories[0]?.computedValue.lng + ')';
-                // throw Error(message);
+                const message = '>> raain-quality ### No rain history corresponding to gauge, probably a data mismatch ? (gauge:'
+                    + cartesianGaugeHistory.value.lat + ',' + cartesianGaugeHistory.value.lng + ',' + cartesianGaugeHistory.date
+                    + ') vs (rain:'
+                    + this.cartesianRainHistories[0]?.computedValue.lat + ',' + this.cartesianRainHistories[0]?.computedValue.lng
+                    + ',' + this.cartesianRainHistories[0]?.periodBegin + ',' + this.cartesianRainHistories[0]?.periodEnd
+                    + ' __ '
+                    + this.cartesianRainHistories[this.cartesianRainHistories.length - 1]?.computedValue.lat
+                    + ',' + this.cartesianRainHistories[this.cartesianRainHistories.length - 1]?.computedValue.lng
+                    + ',' + this.cartesianRainHistories[this.cartesianRainHistories.length - 1]?.periodBegin
+                    + ',' + this.cartesianRainHistories[this.cartesianRainHistories.length - 1]?.periodEnd
+                    + ')';
                 console.warn(message);
             } else {
                 const point = new QualityPoint(cartesianGaugeHistory.gaugeId,
@@ -103,14 +135,8 @@ export class CartesianQuality {
             [],
             0,
             0,
-            'v1');
+            'v1.1');
 
-        delete speed.xDiff;
-        delete speed.yDiff;
-        this.rainComputationQuality.speed = {
-            angleDegrees: speed.angleDegrees,
-            speedMetersPerSec: speed.speedNormalized * 1000 * (this.distanceRatio * 100000) // 1 lat = approx. 100km => 100 000m)
-        };
         this.rainComputationQuality.maximums = maximums;
         this.rainComputationQuality.points = points;
         this.rainComputationQuality.indicator = this.computeQualityIndicator(points);
@@ -152,9 +178,9 @@ export class CartesianQuality {
         return speedComputing.computeSpeed();
     }
 
-    private getAssociatedRainCartesianHistory(cartesianGaugeHistory: CartesianGaugeHistory,
-                                              speed: SpeedComparator,
-                                              scale = CartesianQuality.DEFAULT_SCALE): CartesianRainHistory {
+    public getAssociatedRainCartesianHistory(cartesianGaugeHistory: CartesianGaugeHistory,
+                                             speed: SpeedComparator,
+                                             scale = CartesianQuality.DEFAULT_SCALE): CartesianRainHistory {
 
         const filtered = this.cartesianRainHistories.filter(c => {
             const sameLat = QualityTools.isEqualsLatLng(
@@ -165,8 +191,11 @@ export class CartesianQuality {
                 c.computedValue.lng,
                 speed.getLongitudeDiff(scale) + cartesianGaugeHistory.value.lng,
                 scale);
-            return sameLat && sameLng;
+            const samePeriod = c.periodBegin.getTime() < cartesianGaugeHistory.date.getTime()
+                && cartesianGaugeHistory.date.getTime() <= c.periodEnd.getTime();
+            return sameLat && sameLng && samePeriod;
         });
+        console.log('filtered:', filtered);
         return filtered && filtered.length === 1 ? filtered[0] : null;
     }
 
