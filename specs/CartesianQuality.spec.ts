@@ -40,7 +40,7 @@ describe('CartesianQuality', () => {
                 let cartesianRainHistory = new CartesianRainHistory(
                     measureDate1,
                     measureDate2,
-                    new CartesianValue(100, latitude, longitude));
+                    new CartesianValue(120, latitude, longitude));
 
                 const gaugeIndex = QualityTools.indexOfDualArray(possibleGaugePositions,
                     [QualityTools.roundLatLng(latitude - gaugeTranslation), longitude]);
@@ -48,7 +48,7 @@ describe('CartesianQuality', () => {
                     cartesianRainHistory = new CartesianRainHistory(
                         measureDate1,
                         measureDate2,
-                        new CartesianValue(gaugeIndex + 7, latitude, longitude));
+                        new CartesianValue(gaugeIndex + 12, latitude, longitude));
                 }
 
                 cartesianRainHistories.push(cartesianRainHistory);
@@ -93,7 +93,7 @@ describe('CartesianQuality', () => {
         const cartesianRainHistory = await cartesianQuality.getAssociatedRainCartesianHistory(
             gaugeHistory, speedComparator, sharedScale);
 
-        expect(cartesianRainHistory.computedValue.value).equal(100);
+        expect(cartesianRainHistory.computedValue.value).equal(120);
         expect(cartesianRainHistory.computedValue.lat).equal(41.4);
         expect(cartesianRainHistory.computedValue.lng).equal(40.9);
 
@@ -113,12 +113,35 @@ describe('CartesianQuality', () => {
         const cartesianRainHistory = CartesianQuality.GetBestAssociatedRainCartesianHistory(
             gaugeHistory, scenario.cartesianRainHistories, sharedScale);
 
-        expect(cartesianRainHistory.computedValue.value).equal(7);
+        expect(cartesianRainHistory.computedValue.value).equal(12);
         expect(cartesianRainHistory.computedValue.lat).equal(41.7); // linked to gaugeTranslation
         expect(cartesianRainHistory.computedValue.lng).equal(41.9);
         expect(cartesianRainHistory.periodBegin.getTime()).equal(0);
         expect(cartesianRainHistory.periodEnd.getTime()).equal(600000);
         expect(scenario.cartesianRainHistories.indexOf(cartesianRainHistory)).equals(376);
+
+    });
+
+    it('should GetTopOfAssociatedRainCartesianHistory', async () => {
+
+        const sharedScale = 0.1;
+        const gaugeTranslation = -0.2;
+        const scenario = getPreparedScenario(40, 42, sharedScale, gaugeTranslation);
+        const gaugeHistory = scenario.cartesianGaugeHistories[0];
+        expect(gaugeHistory.value.value).equal(5);
+        expect(gaugeHistory.value.lat).equal(41.9);
+        expect(gaugeHistory.value.lng).equal(41.9);
+        expect(gaugeHistory.date.getTime()).equal(300000);
+
+        const cartesianRainHistory = CartesianQuality.GetTopOfAssociatedRainCartesianHistory(
+            gaugeHistory, scenario.cartesianRainHistories, sharedScale);
+
+        expect(cartesianRainHistory.computedValue.value).equal(120);
+        expect(cartesianRainHistory.computedValue.lat).equal(41.9); // linked to gaugeTranslation
+        expect(cartesianRainHistory.computedValue.lng).equal(41.9);
+        expect(cartesianRainHistory.periodBegin.getTime()).equal(0);
+        expect(cartesianRainHistory.periodEnd.getTime()).equal(600000);
+        expect(scenario.cartesianRainHistories.indexOf(cartesianRainHistory)).equals(418);
 
     });
 
@@ -145,18 +168,18 @@ describe('CartesianQuality', () => {
         const rainComputationQuality = await cartesianQuality.getRainComputationQuality();
 
         // Verify results
-        expect(rainComputationQuality.indicator).eq(2);
-        expect(rainComputationQuality.points.length).eq(4);
-        expect(rainComputationQuality.maximums.rainMeasureValue).eq(7);
-        expect(rainComputationQuality.maximums.gaugeMeasureValue).eq(5);
+        expect(rainComputationQuality.indicator).eq(16);
+        expect(rainComputationQuality.points.length).eq(1);
+        expect(rainComputationQuality.maximums.rainMeasureValue).eq(4);
+        expect(rainComputationQuality.maximums.gaugeMeasureValue).eq(20);
 
         expect(rainComputationQuality.points[0].gaugeId).eq('gauge0');
         expect(rainComputationQuality.points[0].gaugeCartesianValue.lat).eq(0.9);
         expect(rainComputationQuality.points[0].gaugeCartesianValue.lng).eq(0.9);
-        expect(rainComputationQuality.points[0].gaugeCartesianValue.value).eq(5);
+        expect(rainComputationQuality.points[0].gaugeCartesianValue.value).eq(20);
         expect(rainComputationQuality.points[0].rainCartesianValue.lat).eq(0.9);
         expect(rainComputationQuality.points[0].rainCartesianValue.lng).eq(0.9);
-        expect(rainComputationQuality.points[0].rainCartesianValue.value).eq(7);
+        expect(rainComputationQuality.points[0].rainCartesianValue.value).eq(4);
     });
 
     it('should get more challenging CartesianQuality', async () => {
@@ -171,16 +194,16 @@ describe('CartesianQuality', () => {
         console.log(new Date().toISOString(), 'end');
 
         // Verify results
-        expect(rainComputationQuality.indicator).eq(2);
-        expect(rainComputationQuality.maximums.rainMeasureValue).eq(7);
-        expect(rainComputationQuality.maximums.gaugeMeasureValue).eq(5);
+        expect(rainComputationQuality.indicator).eq(20);
+        expect(rainComputationQuality.maximums.rainMeasureValue).eq(40);
+        expect(rainComputationQuality.maximums.gaugeMeasureValue).eq(20);
 
-        expect(rainComputationQuality.points.length).eq(4);
+        expect(rainComputationQuality.points.length).eq(1);
         expect(rainComputationQuality.points[0].gaugeId).eq('gauge0');
-        expect(rainComputationQuality.points[0].rainCartesianValue.value).eq(7);
+        expect(rainComputationQuality.points[0].rainCartesianValue.value).eq(40);
         expect(rainComputationQuality.points[0].rainCartesianValue.lat).eq(0.85);
         expect(rainComputationQuality.points[0].rainCartesianValue.lng).eq(0.9);
-        expect(rainComputationQuality.points[0].gaugeCartesianValue.value).eq(5);
+        expect(rainComputationQuality.points[0].gaugeCartesianValue.value).eq(20);
         expect(rainComputationQuality.points[0].gaugeCartesianValue.lat).eq(0.9);
         expect(rainComputationQuality.points[0].gaugeCartesianValue.lng).eq(0.9);
 
@@ -204,11 +227,11 @@ describe('CartesianQuality', () => {
         console.log(new Date().toISOString(), 'end');
 
         // Verify results
-        expect(rainComputationQuality.indicator).eq(2);
-        expect(rainComputationQuality.maximums.rainMeasureValue).eq(7);
-        expect(rainComputationQuality.maximums.gaugeMeasureValue).eq(5);
+        expect(rainComputationQuality.indicator).eq(20);
+        expect(rainComputationQuality.maximums.rainMeasureValue).eq(40);
+        expect(rainComputationQuality.maximums.gaugeMeasureValue).eq(20);
 
-        expect(rainComputationQuality.points.length).eq(4);
+        expect(rainComputationQuality.points.length).eq(1);
         expect(rainComputationQuality.points[0].gaugeId).eq('gauge0');
         expect(rainComputationQuality.points[0].rainCartesianValue.value).eq(7);
         expect(rainComputationQuality.points[0].rainCartesianValue.lat).eq(41.85);
@@ -237,11 +260,11 @@ describe('CartesianQuality', () => {
         console.log(new Date().toISOString(), 'end');
 
         // Verify results
-        expect(rainComputationQuality.indicator).eq(2);
+        expect(rainComputationQuality.indicator).eq(20);
         expect(rainComputationQuality.maximums.rainMeasureValue).eq(7);
-        expect(rainComputationQuality.maximums.gaugeMeasureValue).eq(5);
+        expect(rainComputationQuality.maximums.gaugeMeasureValue).eq(20);
 
-        expect(rainComputationQuality.points.length).eq(4);
+        expect(rainComputationQuality.points.length).eq(1);
         expect(rainComputationQuality.points[0].gaugeId).eq('gauge0');
         expect(rainComputationQuality.points[0].rainCartesianValue.value).eq(7);
         expect(rainComputationQuality.points[0].rainCartesianValue.lat).eq(41.8);

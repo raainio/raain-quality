@@ -48,6 +48,25 @@ export class CartesianQuality {
         return bestCartesianRainHistory;
     }
 
+    public static GetTopOfAssociatedRainCartesianHistory(cartesianGaugeHistory: CartesianGaugeHistory,
+                                                         cartesianRainHistories: CartesianRainHistory[],
+                                                         scale = CartesianQuality.DEFAULT_SCALE): CartesianRainHistory {
+        let bestCartesianRainHistory = null;
+        cartesianRainHistories.forEach(c => {
+            const samePeriod = c.periodBegin.getTime() < cartesianGaugeHistory.date.getTime()
+                && cartesianGaugeHistory.date.getTime() <= c.periodEnd.getTime();
+
+            const isTopOf =
+                QualityTools.isEqualsLatLng(cartesianGaugeHistory.value.lat, c.computedValue.lat, scale) &&
+                QualityTools.isEqualsLatLng(cartesianGaugeHistory.value.lng, c.computedValue.lng, scale);
+
+            if (isTopOf && samePeriod) {
+                bestCartesianRainHistory = c;
+            }
+        });
+        return bestCartesianRainHistory;
+    }
+
     public async getRainComputationQuality(): Promise<RainComputationQuality> {
 
         if (this.rainComputationQuality) {
@@ -80,9 +99,12 @@ export class CartesianQuality {
         }
 
         const dates = {minDate: undefined, maxDate: undefined};
+        const beforeLaunching = new Date();
+        const qualities = [];
 
         const cartesianRainHistoriesFiltered = this.cartesianRainHistories.filter(cartesianRainHistory => {
             this.storeDates(dates, cartesianRainHistory);
+            qualities.push(1); // TODO get gualities from devices
 
             let outOfAllGauges = true;
             for (const cartesianGaugeHistory of this.cartesianGaugeHistories) {
@@ -97,43 +119,60 @@ export class CartesianQuality {
                 }
             }
             return !outOfAllGauges;
+        }).map(e => {
+            e.computedValue.value = e.computedValue.value / 12; // TODO generalify /12
+            return e;
         });
 
         const maximums = {rainMeasureValue: undefined, gaugeMeasureValue: undefined};
         const points: QualityPoint[] = [];
         for (const cartesianGaugeHistory of this.cartesianGaugeHistories) {
 
-            const cartesianRainHistoryTranslated = CartesianQuality.GetBestAssociatedRainCartesianHistory(
+            const cartesianRainHistoryTranslated = CartesianQuality.GetTopOfAssociatedRainCartesianHistory(
                 cartesianGaugeHistory, cartesianRainHistoriesFiltered, this.distanceRatio);
             if (cartesianRainHistoryTranslated === null) {
                 const message = '>> raain-quality ### No rain history corresponding to gauge, probably a data mismatch ? (gauge:'
-                    + cartesianGaugeHistory.value.lat + ',' + cartesianGaugeHistory.value.lng + ',' + cartesianGaugeHistory.date
+                    + cartesianGaugeHistory.value.lat + ',' + cartesianGaugeHistory.value.lng
+                    + ',' + cartesianGaugeHistory.date.toISOString()
                     + ') vs (rain:'
                     + this.cartesianRainHistories[0]?.computedValue.lat + ',' + this.cartesianRainHistories[0]?.computedValue.lng
-                    + ',' + this.cartesianRainHistories[0]?.periodBegin + ',' + this.cartesianRainHistories[0]?.periodEnd
+                    + ',' + this.cartesianRainHistories[0]?.periodBegin.toISOString()
+                    + ',' + this.cartesianRainHistories[0]?.periodEnd.toISOString()
                     + ' __ '
                     + this.cartesianRainHistories[this.cartesianRainHistories.length - 1]?.computedValue.lat
                     + ',' + this.cartesianRainHistories[this.cartesianRainHistories.length - 1]?.computedValue.lng
-                    + ',' + this.cartesianRainHistories[this.cartesianRainHistories.length - 1]?.periodBegin
-                    + ',' + this.cartesianRainHistories[this.cartesianRainHistories.length - 1]?.periodEnd
+                    + ',' + this.cartesianRainHistories[this.cartesianRainHistories.length - 1]?.periodBegin.toISOString()
+                    + ',' + this.cartesianRainHistories[this.cartesianRainHistories.length - 1]?.periodEnd.toISOString()
                     + ')';
                 console.warn(message);
             } else {
-                const point = new QualityPoint(cartesianGaugeHistory.gaugeId,
+                let point = new QualityPoint(cartesianGaugeHistory.gaugeId,
                     cartesianRainHistoryTranslated.computedValue,
                     cartesianGaugeHistory.value);
 
+                const existingPoints = points.filter(p => p.gaugeId === cartesianGaugeHistory.gaugeId);
+                if (existingPoints.length === 1) {
+                    existingPoints[0].rainCartesianValue.value += point.rainCartesianValue.value;
+                    existingPoints[0].gaugeCartesianValue.value += point.gaugeCartesianValue.value;
+                    point = existingPoints[0];
+                } else if (existingPoints.length === 0) {
+                    points.push(point);
+                } else {
+                    console.error('@@@@@ ALLO HOUSTON !', point);
+                }
+
                 this.storeMaximums(maximums, point);
-                points.push(point);
             }
         }
 
+        const qualitySum = qualities.reduce((a, b) => a + b, 0);
+        const qualityAvg = (qualitySum / qualities.length) || 0;
 
         this.rainComputationQuality = new RainComputationQuality(
             'qualityId' + new Date().toISOString(),
             dates.minDate, dates.maxDate,
             [],
-            0,
+            qualityAvg,
             0,
             'v1.1');
 
@@ -141,6 +180,7 @@ export class CartesianQuality {
         this.rainComputationQuality.points = points;
         this.rainComputationQuality.indicator = this.computeQualityIndicator(points);
 
+        this.rainComputationQuality.timeSpentInMs = new Date().getTime() - beforeLaunching.getTime();
         return this.rainComputationQuality;
     }
 
@@ -199,8 +239,7 @@ export class CartesianQuality {
         return filtered && filtered.length === 1 ? filtered[0] : null;
     }
 
-    private computeQualityIndicator(points: QualityPoint[]
-    ): number {
+    private computeQualityIndicator(points: QualityPoint[]): number {
         let indicator = 0;
         for (const point of points) {
             indicator += Math.abs(point.rainCartesianValue?.value - point.gaugeCartesianValue?.value);
