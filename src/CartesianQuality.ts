@@ -126,8 +126,11 @@ export class CartesianQuality {
 
         const maximums = {rainMeasureValue: undefined, gaugeMeasureValue: undefined};
         const points: QualityPoint[] = [];
+        const pointsHistory: QualityPoint[] = [];
         for (const cartesianGaugeHistory of this.cartesianGaugeHistories) {
 
+            // const cartesianRainHistoryTranslated = CartesianQuality.GetBestAssociatedRainCartesianHistory(
+            //    cartesianGaugeHistory, cartesianRainHistoriesFiltered, this.distanceRatio);
             const cartesianRainHistoryTranslated = CartesianQuality.GetTopOfAssociatedRainCartesianHistory(
                 cartesianGaugeHistory, cartesianRainHistoriesFiltered, this.distanceRatio);
             if (cartesianRainHistoryTranslated === null) {
@@ -149,6 +152,8 @@ export class CartesianQuality {
                 let point = new QualityPoint(cartesianGaugeHistory.gaugeId,
                     cartesianRainHistoryTranslated.computedValue,
                     cartesianGaugeHistory.value);
+
+                pointsHistory.push(point);
 
                 const existingPoints = points.filter(p => p.gaugeId === cartesianGaugeHistory.gaugeId);
                 if (existingPoints.length === 1) {
@@ -178,6 +183,7 @@ export class CartesianQuality {
 
         this.rainComputationQuality.maximums = maximums;
         this.rainComputationQuality.points = points;
+        this.rainComputationQuality.pointsHistory = pointsHistory;
         this.rainComputationQuality.indicator = this.computeQualityIndicator(points);
 
         this.rainComputationQuality.timeSpentInMs = new Date().getTime() - beforeLaunching.getTime();
