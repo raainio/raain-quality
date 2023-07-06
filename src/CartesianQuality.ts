@@ -149,9 +149,12 @@ export class CartesianQuality {
                     + ')';
                 console.warn(message);
             } else {
-                let point = new QualityPoint(cartesianGaugeHistory.gaugeId,
-                    cartesianRainHistoryTranslated.computedValue,
-                    cartesianGaugeHistory.value);
+                let point = new QualityPoint(
+                    cartesianGaugeHistory.gaugeId,
+                    cartesianGaugeHistory.date,
+                    cartesianRainHistoryTranslated.periodBegin,
+                    cartesianGaugeHistory.value,
+                    cartesianRainHistoryTranslated.computedValue);
 
                 pointsHistory.push(point);
 

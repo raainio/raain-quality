@@ -4,8 +4,10 @@ export class QualityPoint {
 
     constructor(
         public gaugeId: string,
-        public rainCartesianValue: CartesianValue,
-        public gaugeCartesianValue: CartesianValue
+        public gaugeDate: Date,
+        public rainDate: Date,
+        public gaugeCartesianValue: CartesianValue,
+        public rainCartesianValue: CartesianValue
     ) {
     }
 
