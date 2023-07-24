@@ -6,7 +6,7 @@ export * from './history/PositionHistory';
 
 export * from './tools/ConverterFromPolar';
 export * from './tools/QualityTools';
-export * from './tools/QualityPoint';
-export * from './tools/SpeedComparator';
+export * from './tools/SpeedMatrix';
 export * from './tools/SpeedComputing';
 export * from './tools/LatLng';
+export * from './tools/Position';

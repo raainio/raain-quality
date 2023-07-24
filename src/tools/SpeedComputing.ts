@@ -1,146 +1,138 @@
-import {SpeedComparator} from './SpeedComparator';
 import {PositionHistory} from '../history/PositionHistory';
+import {SpeedMatrix} from './SpeedMatrix';
+import {Position} from './Position';
+import {CartesianQuality} from '../CartesianQuality';
 
 export class SpeedComputing {
 
     private filteredRainHistories: PositionHistory[];
+    private filteredGaugeHistories: PositionHistory[];
 
     constructor(
         protected rainHistories: PositionHistory[],
         protected gaugeHistories: PositionHistory[],
-        protected distanceRatio: number = 1,
-        private rangeGaugeLarge: number = 6,
-        private rangeGaugeClose: number = 2
+        private rangeGaugeLarge: number = 0.08,
+        private roundScale: number = CartesianQuality.DEFAULT_SCALE,
     ) {
         this.filteredRainHistories = rainHistories;
+        this.filteredGaugeHistories = gaugeHistories;
     }
 
-    public computeSpeed(): SpeedComparator {
+    public computeSpeedMatrix(date: Date,
+                              options: {
+                                  periodCount: number,
+                                  periodMinutes: number,
+                              } = {periodCount: 6, periodMinutes: 30}): SpeedMatrix {
 
-        // filter to use only what is needed
-        const partOfGaugesArea = (value: PositionHistory) => {
-            const contains = this.gaugeHistories.filter(g => {
+        const periodCount = options.periodCount;
+        const periodMinutes = options.periodMinutes;
+
+        // filter gauge history in the period
+        this.filteredGaugeHistories = this.gaugeHistories.filter(g => {
+            const time = g.date.getTime();
+            const dateTime = date.getTime();
+            const dateTimeMinusXmin = dateTime - periodMinutes * 60000;
+            return dateTimeMinusXmin <= time && time <= dateTime;
+        }).sort((a, b) => b.date.getTime() - a.date.getTime());
+
+        // filter rain history in the period and near to gauge
+        const cornerLow = new Position(0, 0);
+        const cornerHigh = new Position(0, 0);
+        const partOfGaugesAreaAndInThePeriod = (value: PositionHistory) => {
+            cornerLow.x = Math.min(cornerLow.x, value.x);
+            cornerLow.y = Math.min(cornerLow.y, value.y);
+            cornerHigh.x = Math.max(cornerHigh.x, value.x);
+            cornerHigh.y = Math.max(cornerHigh.y, value.y);
+            const contains = this.filteredGaugeHistories.filter(g => {
                 const inX = (g.x - this.rangeGaugeLarge <= value.x) && (value.x <= g.x + this.rangeGaugeLarge);
                 const inY = (g.y - this.rangeGaugeLarge <= value.y) && (value.y <= g.y + this.rangeGaugeLarge);
-                return inX && inY;
+                const time = value.date.getTime();
+                const dateTime = date.getTime();
+                const dateTimeMinusXmin = dateTime - periodMinutes * 60000;
+                const inTheLastXmin = dateTimeMinusXmin <= time && time <= dateTime;
+                return inX && inY && inTheLastXmin;
             });
             return contains.length > 0;
         };
-        this.filteredRainHistories = this.filteredRainHistories.filter(v => {
-            return partOfGaugesArea(v);
-        });
+        this.filteredRainHistories = this.rainHistories.filter(v => partOfGaugesAreaAndInThePeriod(v))
+            .sort((a, b) => b.date.getTime() - a.date.getTime());
 
-        // compute most representative position on map
-        const speedComparator = this.speedOnEachLargeArea();
+        const center = new Position(
+            Math.round((cornerHigh.x + cornerLow.x) / (2 * this.roundScale)),
+            Math.round((cornerHigh.y + cornerLow.y) / (2 * this.roundScale)));
 
-        // convert position to speed (needs time diff)
-        let diffTimeBetweenGaugeAndRain = 0;
-        if (this.gaugeHistories.length > 0 && this.rainHistories.length > 0) {
-            const cartesianRainHistory = this.rainHistories[0];
-            const cartesianGaugeHistory = this.gaugeHistories[0];
-            diffTimeBetweenGaugeAndRain = cartesianGaugeHistory.date.getTime() - cartesianRainHistory.date.getTime();
-        }
-        speedComparator.convertSpeed(diffTimeBetweenGaugeAndRain);
+        // on each period, store gauge history related to rain values area
+        const linkedGaugeAndRainHistories: PositionHistory[][] = [];
+        for (let period = 0; period < periodCount; period++) {
 
-        return speedComparator;
-    }
+            const gaugeHistoryInThePeriod = this.filteredGaugeHistories.filter(gaugeHistory => {
+                const time = gaugeHistory.date.getTime();
+                const periodBeginTime = date.getTime() - (period + 1) * periodMinutes / periodCount * 60000;
+                const periodEndTime = date.getTime() - period * periodMinutes / periodCount * 60000;
+                return periodBeginTime <= time && time < periodEndTime;
+            });
 
-    protected speedOnEachLargeArea(): SpeedComparator {
+            const rainHistoryInThePeriod = this.filteredRainHistories.filter(rainHistory => {
+                const time = rainHistory.date.getTime();
+                const periodBeginTime = date.getTime() - (period + 1) * periodMinutes / periodCount * 60000;
+                const periodEndTime = date.getTime() - (period) * periodMinutes / periodCount * 60000;
+                return periodBeginTime <= time && time < periodEndTime;
+            });
 
-        const speedComparator = new SpeedComparator(-1, -1, 0, 0);
-
-        for (let x = 0 - this.rangeGaugeLarge; x <= this.rangeGaugeLarge; x++) {
-            for (let y = 0 - this.rangeGaugeLarge; y <= this.rangeGaugeLarge; y++) {
-
-                let bestSpeedComparator = new SpeedComparator(
-                    speedComparator.deltaSum, speedComparator.distanceSum, x, y);
-                bestSpeedComparator = this.getTheBestSpeed(speedComparator, bestSpeedComparator);
-
-                speedComparator.xDiff = bestSpeedComparator.xDiff;
-                speedComparator.yDiff = bestSpeedComparator.yDiff;
-                speedComparator.deltaSum = bestSpeedComparator.deltaSum;
-                speedComparator.distanceSum = bestSpeedComparator.distanceSum;
-            }
-        }
-
-        return speedComparator;
-    }
-
-    protected getTheBestSpeed(legacySpeed: SpeedComparator, challengedSpeed: SpeedComparator): SpeedComparator {
-
-        const gaugesSpeed: SpeedComparator[] = [];
-        for (const gaugeHistory of this.gaugeHistories) {
-
-            let bestSpeedForGauge;
-            let minDiffValueForGauge = null;
-
-            for (let x = 0 - this.rangeGaugeClose; (x <= this.rangeGaugeClose); x++) {
-                for (let y = 0 - this.rangeGaugeClose; (y <= this.rangeGaugeClose); y++) {
-
-                    const speedBetweenCenter = new SpeedComparator(0, 0,
-                        x + challengedSpeed.xDiff, y + challengedSpeed.yDiff);
-                    const rainHistory = this.getAssociatedRainHistory(gaugeHistory, speedBetweenCenter);
-
-                    if (rainHistory) {
-                        const diffValue = Math.abs(rainHistory.value - gaugeHistory.value);
-
-                        const isTheBestCloseAreaForNow = minDiffValueForGauge === null || minDiffValueForGauge > diffValue;
-
-                        if (isTheBestCloseAreaForNow) {
-                            if (!bestSpeedForGauge) {
-                                bestSpeedForGauge = new SpeedComparator(0, 0, 0, 0);
-                            }
-
-                            minDiffValueForGauge = diffValue;
-                            bestSpeedForGauge.xDiff = challengedSpeed.xDiff;
-                            bestSpeedForGauge.yDiff = challengedSpeed.yDiff;
-                            bestSpeedForGauge.deltaSum = diffValue;
-                            bestSpeedForGauge.distanceSum = Math.abs(x) + Math.abs(y);
-                        }
-                    }
+            const histories = [];
+            gaugeHistoryInThePeriod.forEach(positionHistory => {
+                const relatedRains = rainHistoryInThePeriod.filter(g => {
+                    const inX = (g.x - this.rangeGaugeLarge <= positionHistory.x) && (positionHistory.x <= g.x + this.rangeGaugeLarge);
+                    const inY = (g.y - this.rangeGaugeLarge <= positionHistory.y) && (positionHistory.y <= g.y + this.rangeGaugeLarge);
+                    return inX && inY;
+                });
+                for (const relatedRain of relatedRains) {
+                    const gaugeValue = Number.EPSILON + positionHistory.value;
+                    const rainValue = Number.EPSILON + relatedRain.value;
+                    histories.push(new PositionHistory(positionHistory.id,
+                        relatedRain.date,
+                        Math.round((relatedRain.x - positionHistory.x) / this.roundScale),
+                        Math.round((relatedRain.y - positionHistory.y) / this.roundScale),
+                        gaugeValue > rainValue ? rainValue / gaugeValue : gaugeValue / rainValue,
+                        gaugeValue, rainValue));
                 }
+            });
+            linkedGaugeAndRainHistories.push(histories);
+        }
+
+        for (const each of linkedGaugeAndRainHistories) {
+            if (each.length === 0 || each.length !== linkedGaugeAndRainHistories[0].length) {
+                console.error('impossible to compute speed quality, periods are inconsistent',
+                    linkedGaugeAndRainHistories[0].length, each.length);
+                return null;
             }
-
-            if (bestSpeedForGauge) {
-                gaugesSpeed.push(bestSpeedForGauge);
-            }
         }
 
-        let deltaSum = 0;
-        let distanceSum = 0;
-        for (const gaugeSpeed of gaugesSpeed) {
-            deltaSum += gaugeSpeed.deltaSum;
-            distanceSum += gaugeSpeed.distanceSum;
-        }
-
-        const isTheBestForNow = challengedSpeed.deltaSum < 0 || challengedSpeed.deltaSum > deltaSum
-            || (challengedSpeed.deltaSum === deltaSum && challengedSpeed.distanceSum > distanceSum);
-
-        if (gaugesSpeed.length > 0 && isTheBestForNow) {
-            challengedSpeed.deltaSum = deltaSum;
-            challengedSpeed.distanceSum = distanceSum;
-            return challengedSpeed;
-        }
-
-        return legacySpeed;
+        return new SpeedMatrix(linkedGaugeAndRainHistories, center, 1, this);
     }
 
-
-    protected getAssociatedRainHistory(gaugeHistory: PositionHistory,
-                                       speed: SpeedComparator): PositionHistory {
-
-        const filtered = this.filteredRainHistories.filter(c => {
-            const sameX = c.x === speed.xDiff + gaugeHistory.x;
-            const sameY = c.y === speed.yDiff + gaugeHistory.y;
-            return sameX && sameY;
-        });
-
-        if (!filtered || filtered.length !== 1) {
-            return null;
+    getGaugePosition(id: string): PositionHistory {
+        const found = this.filteredGaugeHistories.filter(h => h.id === id);
+        if (found.length > 0) {
+            return found[0];
         }
-
-        return filtered[0];
+        return null;
     }
 
+    getRainPosition(gaugePosition: Position, speed: { x: number, y: number }): PositionHistory {
+        const found = this.filteredRainHistories.filter(h =>
+            h.x === gaugePosition.x + (speed.x * this.roundScale) && h.y === gaugePosition.y + (speed.y * this.roundScale)
+        );
+        if (found.length > 0) {
+            return found[0];
+        }
+        return null;
+    }
+
+    getRelativeSpeed(speed: { x: number, y: number }): { x: number, y: number } {
+        speed.x = this.roundScale * speed.x;
+        speed.y = this.roundScale * speed.y;
+        return speed;
+    }
 
 }

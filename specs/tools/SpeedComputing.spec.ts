@@ -1,149 +1,115 @@
 import {PositionHistory, QualityTools, SpeedComputing} from '../../src';
 import {expect} from 'chai';
 
-
 describe('SpeedComputing', () => {
 
-    function getPreparedScenario(width = 50, translation = 0, gaugesCount = 1) {
-        const minDate = new Date('2000-01-01');
-        const possibleGaugePositions = [[-1, -1]];
-        for (let i = 1; i < gaugesCount; i++) {
+    function getPreparedScenario(minDate: Date,
+                                 width = 50,
+                                 translation = 0,
+                                 gaugesCount = 1,
+                                 periodCount = 6) {
+        const possibleGaugePositions = [[-4, -5]];
+        for (let i = 0; i < gaugesCount; i++) {
             possibleGaugePositions.push([i * 2, i * 3]);
         }
-        const rainHistories = [];
-        const gaugeHistories = [];
-        let count = 0;
-        for (let x = -width; x <= width; x++) {
-            for (let y = -width; y <= width; y++) {
-                count++;
-                const measureDate = new Date(minDate.getTime() + x);
-                const gaugeIndex = QualityTools.indexOfDualArray(possibleGaugePositions, [x, y]);
-                if (gaugeIndex >= 0) {
-                    const gaugeHistory = new PositionHistory(
-                        'gauge' + count,
-                        measureDate,
-                        x, y, 5);
-                    gaugeHistories.push(gaugeHistory);
+        const rainHistories: PositionHistory[] = [];
+        const gaugeHistories: PositionHistory[] = [];
+        let count;
+
+        for (let period = 0; period < periodCount; period++) {
+            const measureRainDate = new Date(minDate.getTime() + period * 60000 * 5);
+            const measureGaugeDate = new Date(minDate.getTime() + period * 60000 * 5 + 10000);
+
+            count = 0;
+            for (let x = -width; x <= width; x++) {
+                for (let y = -width; y <= width; y++) {
+                    const gaugeIndex = QualityTools.indexOfDualArray(possibleGaugePositions, [x, y]);
+                    if (gaugeIndex >= 0) {
+                        const gaugeHistory = new PositionHistory(
+                            'gauge' + count++,
+                            measureGaugeDate,
+                            x, y, 5 + gaugeIndex);
+                        gaugeHistories.push(gaugeHistory);
+                    }
                 }
             }
-        }
 
-        count = 0;
-        for (let x = -width; x <= width; x++) {
-            for (let y = -width; y <= width; y++) {
-                count++;
-                const measureDate = new Date(minDate.getTime() + x);
-                let rainHistory = new PositionHistory(
-                    'rain' + count,
-                    measureDate,
-                    x, y, 100);
-
-                const gaugeIndex = QualityTools.indexOfDualArray(possibleGaugePositions, [x - translation, y]);
-                if (gaugeIndex >= 0) {
-                    rainHistory = new PositionHistory(
+            count = 0;
+            for (let x = -width; x <= width; x++) {
+                for (let y = -width; y <= width; y++) {
+                    count++;
+                    let rainHistory = new PositionHistory(
                         'rain' + count,
-                        measureDate,
-                        x, y, 5);
-                }
+                        measureRainDate,
+                        x, y, 100);
 
-                rainHistories.push(rainHistory);
+                    const gaugeIndex = QualityTools.indexOfDualArray(possibleGaugePositions, [x - translation, y]);
+                    if (gaugeIndex >= 0) {
+                        rainHistory = new PositionHistory(
+                            'rain' + count,
+                            measureRainDate,
+                            x, y, 5 + gaugeIndex * 0.1);
+                    }
+
+                    rainHistories.push(rainHistory);
+                }
             }
         }
         return {rainHistories, gaugeHistories};
     }
 
-    it('should get default speed', () => {
+    it('should get matrix with non valid values on empty history', () => {
         const speedComputing = new SpeedComputing([], []);
-        const speedComparator = speedComputing.computeSpeed();
-
-        expect(speedComparator.deltaSum).eq(-1);
-        expect(speedComparator.distanceSum).eq(-1);
-        expect(speedComparator.xDiff).eq(0);
-        expect(speedComparator.yDiff).eq(0);
-        expect(speedComparator.speedNormalized).eq(0);
-        expect(speedComparator.angleDegrees).eq(0);
-
+        const speedMatrix = speedComputing.computeSpeedMatrix(new Date());
+        expect(speedMatrix).null;
     });
 
-    it('should get speed(0,0) for one gauge', () => {
+    it('should get matrix for five gauges', () => {
 
         // Prepare scenario : simple 10x10 map with 1 gauge == 1 rain
-        const scenario = getPreparedScenario(10, 0);
+        const periodCount = 7;
+        const scenario = getPreparedScenario(new Date('2000-01-01T01:00:00.000Z'), 10, 0, 5, periodCount);
 
         // Compute the speed
-        const speedComputing = new SpeedComputing(scenario.rainHistories, scenario.gaugeHistories, 1, 4, 1);
-        const speedComparator = speedComputing.computeSpeed();
+        const speedComputing = new SpeedComputing(scenario.rainHistories, scenario.gaugeHistories, 3, 1);
+        const speedMatrix = speedComputing.computeSpeedMatrix(new Date('2000-01-01T01:35:00.000Z'),
+            {periodCount, periodMinutes: 35});
 
         // Verify results
-        expect(speedComparator.deltaSum).eq(0);
-        expect(speedComparator.distanceSum).eq(0);
-        expect(speedComparator.xDiff).eq(0);
-        expect(speedComparator.yDiff).eq(0);
-        expect(speedComparator.speedNormalized).eq(0);
-        expect(speedComparator.angleDegrees).eq(0);
+        // tslint:disable-next-line:max-line-length
+        expect(speedMatrix.getGaugeIdRelatedValues(scenario.gaugeHistories[1].id).gaugeCartesianValue.value)
+            .eq(scenario.gaugeHistories[1].value * periodCount);
+        expect(speedMatrix.getGaugeIdRelatedValues(scenario.gaugeHistories[1].id).rainCartesianValue.value)
+            .eq(35.7);
+        expect(speedMatrix.getGaugeIdRelatedValues(scenario.gaugeHistories[1].id).speed.x).eq(0);
+        expect(speedMatrix.getGaugeIdRelatedValues(scenario.gaugeHistories[1].id).speed.y).eq(0);
 
+        expect(speedMatrix.getGaugeIdRelatedValues(scenario.gaugeHistories[4].id).gaugeCartesianValue.value)
+            .eq(9 * periodCount);
+        expect(speedMatrix.getGaugeIdRelatedValues(scenario.gaugeHistories[4].id).rainCartesianValue.value)
+            .eq(37.8);
+        expect(speedMatrix.getGaugeIdRelatedValues(scenario.gaugeHistories[4].id).speed.x).eq(0);
+        expect(speedMatrix.getGaugeIdRelatedValues(scenario.gaugeHistories[4].id).speed.y).eq(0);
     });
 
-    it('should get speed(3,0) for one gauge', () => {
+    it('should get matrix speed for real images', () => {
 
-        // Prepare scenario : 10x10 map with 1 translated (+3) gauge
-        const scenario = getPreparedScenario(10, 3);
+        // Prepare scenario : simple 10x10 map with 1 gauge == 1 rain
+        const periodCount = 7;
+        const scenario = getPreparedScenario(new Date('2000-01-01T01:00:00.000Z'), 100, 5, 120, periodCount);
 
         // Compute the speed
-        const speedComputing = new SpeedComputing(scenario.rainHistories, scenario.gaugeHistories, 1, 4, 1);
-        const speedComparator = speedComputing.computeSpeed();
+        const speedComputing = new SpeedComputing(scenario.rainHistories, scenario.gaugeHistories, 8, 1);
+        const speedMatrix = speedComputing.computeSpeedMatrix(
+            new Date('2000-01-01T01:35:00.000Z'),
+            {periodCount, periodMinutes: 35});
 
         // Verify results
-        expect(speedComparator.deltaSum).eq(0);
-        expect(speedComparator.distanceSum).eq(0);
-        expect(speedComparator.xDiff).eq(3);
-        expect(speedComparator.yDiff).eq(0);
-        expect(speedComparator.angleDegrees).eq(0);
-        expect(speedComparator.speedNormalized).eq(0.3333333333333333);
-
+        expect(speedMatrix.getGaugeIdRelatedValues(scenario.gaugeHistories[4].id).gaugeCartesianValue.value)
+            .eq(9 * periodCount);
+        expect(speedMatrix.getGaugeIdRelatedValues(scenario.gaugeHistories[4].id).rainCartesianValue.value)
+            .eq(37.8);
+        expect(speedMatrix.getGaugeIdRelatedValues(scenario.gaugeHistories[4].id).speed.x).eq(5);
+        expect(speedMatrix.getGaugeIdRelatedValues(scenario.gaugeHistories[4].id).speed.y).eq(0);
     });
-
-    it('should get speed(5,0) for 4 gauges', () => {
-
-        // Prepare scenario : full map with 4 gauges
-        const scenario = getPreparedScenario(100, 5, 4);
-
-        // Compute the speed
-        console.log(new Date().toISOString(), 'begin');
-        const speedComputing = new SpeedComputing(scenario.rainHistories, scenario.gaugeHistories, 1, 8, 2);
-        const speedComparator = speedComputing.computeSpeed();
-        console.log(new Date().toISOString(), 'end');
-
-        // Verify results
-        expect(speedComparator.deltaSum).eq(0);
-        expect(speedComparator.distanceSum).eq(0);
-        expect(speedComparator.xDiff).eq(5);
-        expect(speedComparator.yDiff).eq(0);
-        expect(speedComparator.angleDegrees).eq(0);
-        expect(speedComparator.speedNormalized).eq(0.050505050505050504);
-
-    });
-
-
-    it('should get speed(5,0) (divided by ratio) for 4 gauges with a different distanceRatio', () => {
-
-        // Prepare scenario : full map with 4 gauges
-        const scenario = getPreparedScenario(100, 5, 4);
-
-        // Compute the speed
-        console.log(new Date().toISOString(), 'begin');
-        const speedComputing = new SpeedComputing(scenario.rainHistories, scenario.gaugeHistories, 0.1, 8, 2);
-        const speedComparator = speedComputing.computeSpeed();
-        console.log(new Date().toISOString(), 'end');
-
-        // Verify results
-        expect(speedComparator.deltaSum).eq(0);
-        expect(speedComparator.distanceSum).eq(0);
-        expect(speedComparator.xDiff).eq(5);
-        expect(speedComparator.yDiff).eq(0);
-        expect(speedComparator.angleDegrees).eq(0);
-        expect(speedComparator.speedNormalized).eq(0.050505050505050504);
-
-    });
-
 });
