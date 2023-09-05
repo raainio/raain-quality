@@ -1,6 +1,6 @@
-import {Position} from '../tools/Position';
+import {PositionValue} from '../tools/PositionValue';
 
-export class PositionHistory extends Position {
+export class PositionHistory extends PositionValue {
     constructor(
         public id: string,
         public date: Date,
@@ -10,6 +10,6 @@ export class PositionHistory extends Position {
         public valueFromGauge?: number,
         public valueFromRain?: number,
     ) {
-        super(x, y);
+        super(x, y, value);
     }
 }

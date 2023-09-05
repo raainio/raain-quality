@@ -1,22 +1,32 @@
 import {CartesianRainHistory} from './history/CartesianRainHistory';
 import {CartesianGaugeHistory} from './history/CartesianGaugeHistory';
 import {RainComputationQuality} from 'raain-model';
-import {SpeedMatrix} from './tools/SpeedMatrix';
 import {SpeedComputing} from './tools/SpeedComputing';
 import {PositionHistory} from './history/PositionHistory';
 import {Position} from './tools/Position';
 import {LatLng} from './tools/LatLng';
+import {SpeedMatrixContainer} from './tools/SpeedMatrixContainer';
 
 export class CartesianQuality {
 
     public static DEFAULT_SCALE = 0.01;
-    public static DEFAULT_AROUND_RANGE = 8;
     private rainComputationQuality: RainComputationQuality;
 
     constructor(
         protected cartesianRainHistories: CartesianRainHistory[],
         protected cartesianGaugeHistories: CartesianGaugeHistory[]
     ) {
+    }
+
+    public static createFromJson(json): CartesianQuality {
+        const created = new CartesianQuality([], []);
+        if (json.cartesianRainHistories) {
+            created.cartesianRainHistories = json.cartesianRainHistories;
+        }
+        if (json.cartesianGaugeHistories) {
+            created.cartesianGaugeHistories = json.cartesianGaugeHistories;
+        }
+        return created;
     }
 
     public async getRainComputationQuality(): Promise<RainComputationQuality> {
@@ -30,9 +40,8 @@ export class CartesianQuality {
             null, null,
             [],
             0,
-            0,
             'none',
-            {rainMeasureValue: undefined, gaugeMeasureValue: undefined});
+            undefined);
 
         if (this.cartesianRainHistories.length === 0) {
             console.warn('>> raain-quality ### no cartesianRainHistory => impossible to compute quality');
@@ -51,11 +60,13 @@ export class CartesianQuality {
         const beforeLaunching = new Date();
 
         const gaugeHistories = this.cartesianGaugeHistories.map(h => {
-            return new PositionHistory(h.gaugeId, h.date, h.value.lat, h.value.lng, h.value.value);
+            return new PositionHistory(h.gaugeId, new Date(h.date), h.value.lat, h.value.lng, h.value.value);
         });
         const rainHistories = this.cartesianRainHistories.map((h, index) => {
             this.storeDates(dates, h);
-            return new PositionHistory('rain' + index, h.periodBegin, h.computedValue.lat, h.computedValue.lng, h.computedValue.value);
+            return new PositionHistory('rain' + index,
+                new Date(h.periodBegin),
+                h.computedValue.lat, h.computedValue.lng, h.computedValue.value);
         });
         const speedComputing = new SpeedComputing(rainHistories, gaugeHistories);
         const speedMatrix = speedComputing.computeSpeedMatrix(dates.maxDate);
@@ -72,11 +83,9 @@ export class CartesianQuality {
             'qualityId' + new Date().toISOString(),
             dates.minDate, dates.maxDate,
             [],
-            SpeedMatrix.computeQualityIndicator(speedMatrix.getQualityPoints()),
             0,
-            'v1.1');
-        this.rainComputationQuality.maximums = maximums;
-        this.rainComputationQuality.qualitySpeedMatrix = speedMatrix;
+            'v0.0.1');
+        this.rainComputationQuality.qualitySpeedMatrixContainer = new SpeedMatrixContainer([speedMatrix]);
         this.rainComputationQuality.timeSpentInMs = new Date().getTime() - beforeLaunching.getTime();
         return this.rainComputationQuality;
     }
@@ -88,18 +97,25 @@ export class CartesianQuality {
         return new LatLng(position.x, position.y);
     }
 
+    toJSON() {
+        return {
+            cartesianRainHistories: this.cartesianRainHistories,
+            cartesianGaugeHistories: this.cartesianGaugeHistories,
+        };
+    }
+
     private storeDates(dates: { minDate: Date, maxDate: Date }, cartesianRainHistory: CartesianRainHistory): void {
+        const historyDate = new Date(cartesianRainHistory.periodBegin);
         if (!dates.minDate
-            || Math.min(dates.minDate.getTime(), cartesianRainHistory.periodBegin.getTime())
-            === cartesianRainHistory.periodBegin.getTime()) {
-            dates.minDate = cartesianRainHistory.periodBegin;
+            || Math.min(new Date(dates.minDate).getTime(), historyDate.getTime())
+            === historyDate.getTime()) {
+            dates.minDate = historyDate;
         }
 
         if (!dates.maxDate
-            || Math.max(dates.maxDate.getTime(), cartesianRainHistory.periodEnd.getTime())
-            === cartesianRainHistory.periodEnd.getTime()) {
-            dates.maxDate = cartesianRainHistory.periodEnd;
+            || Math.max(new Date(dates.maxDate).getTime(), historyDate.getTime())
+            === historyDate.getTime()) {
+            dates.maxDate = historyDate;
         }
     }
-
 }

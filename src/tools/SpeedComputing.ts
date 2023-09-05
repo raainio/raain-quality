@@ -2,6 +2,7 @@ import {PositionHistory} from '../history/PositionHistory';
 import {SpeedMatrix} from './SpeedMatrix';
 import {Position} from './Position';
 import {CartesianQuality} from '../CartesianQuality';
+import {QualityTools} from './QualityTools';
 
 export class SpeedComputing {
 
@@ -11,11 +12,27 @@ export class SpeedComputing {
     constructor(
         protected rainHistories: PositionHistory[],
         protected gaugeHistories: PositionHistory[],
-        private rangeGaugeLarge: number = 0.08,
+        private rangeGaugeLarge: number = SpeedMatrix.DEFAULT_MATRIX_RANGE * CartesianQuality.DEFAULT_SCALE,
         private roundScale: number = CartesianQuality.DEFAULT_SCALE,
     ) {
         this.filteredRainHistories = rainHistories;
         this.filteredGaugeHistories = gaugeHistories;
+    }
+
+    static isIn(rangeGaugeLarge: number, valueXY: { x: number, y: number }, compareXY: { x: number, y: number }, scale: number): boolean {
+
+        const xBefore = Math.round((compareXY.x - rangeGaugeLarge) / scale);
+        const xAfter = Math.round((compareXY.x + rangeGaugeLarge) / scale);
+        const yBefore = Math.round((compareXY.y - rangeGaugeLarge) / scale);
+        const yAfter = Math.round((compareXY.y + rangeGaugeLarge) / scale);
+
+        const xValue = Math.round((valueXY.x) / scale);
+        const yValue = Math.round((valueXY.y) / scale);
+
+        const inX = (xBefore <= xValue) && (xValue <= xAfter);
+        const inY = (yBefore <= yValue) && (yValue <= yAfter);
+
+        return inX && inY;
     }
 
     public computeSpeedMatrix(date: Date,
@@ -26,13 +43,15 @@ export class SpeedComputing {
 
         const periodCount = options.periodCount;
         const periodMinutes = options.periodMinutes;
+        const dateTime = date.getTime();
+        const dateTimeMinusXmin = dateTime - periodMinutes * 60000;
+        const periodLength = Math.round(options.periodMinutes / options.periodCount);
+        let trustedIndicator = SpeedMatrix.DEFAULT_TRUSTED_INDICATOR;
 
-        // filter gauge history in the period
+        // filter gauge history in the period; more open for gauge to include possible delay
         this.filteredGaugeHistories = this.gaugeHistories.filter(g => {
             const time = g.date.getTime();
-            const dateTime = date.getTime();
-            const dateTimeMinusXmin = dateTime - periodMinutes * 60000;
-            return dateTimeMinusXmin <= time && time <= dateTime;
+            return dateTimeMinusXmin <= time && (time - periodLength * 60000) <= dateTime;
         }).sort((a, b) => b.date.getTime() - a.date.getTime());
 
         // filter rain history in the period and near to gauge
@@ -44,13 +63,10 @@ export class SpeedComputing {
             cornerHigh.x = Math.max(cornerHigh.x, value.x);
             cornerHigh.y = Math.max(cornerHigh.y, value.y);
             const contains = this.filteredGaugeHistories.filter(g => {
-                const inX = (g.x - this.rangeGaugeLarge <= value.x) && (value.x <= g.x + this.rangeGaugeLarge);
-                const inY = (g.y - this.rangeGaugeLarge <= value.y) && (value.y <= g.y + this.rangeGaugeLarge);
+                const isInXY = SpeedComputing.isIn(this.rangeGaugeLarge, value, g, this.roundScale);
                 const time = value.date.getTime();
-                const dateTime = date.getTime();
-                const dateTimeMinusXmin = dateTime - periodMinutes * 60000;
                 const inTheLastXmin = dateTimeMinusXmin <= time && time <= dateTime;
-                return inX && inY && inTheLastXmin;
+                return isInXY && inTheLastXmin;
             });
             return contains.length > 0;
         };
@@ -62,53 +78,83 @@ export class SpeedComputing {
             Math.round((cornerHigh.y + cornerLow.y) / (2 * this.roundScale)));
 
         // on each period, store gauge history related to rain values area
+        let smallZoneWidth = SpeedMatrix.DEFAULT_ZONE_RANGE;
+        const expectedRangeLength = Math.pow(2 * (this.rangeGaugeLarge / this.roundScale) + 1, 2);
         const linkedGaugeAndRainHistories: PositionHistory[][] = [];
-        for (let period = 0; period < periodCount; period++) {
+        for (let period = -1; period < periodCount - 1; period++) {
+            const periodBeginTime = date.getTime() - (period + 1) * periodLength * 60000;
+            const periodEndTime = date.getTime() - period * periodLength * 60000;
 
             const gaugeHistoryInThePeriod = this.filteredGaugeHistories.filter(gaugeHistory => {
                 const time = gaugeHistory.date.getTime();
-                const periodBeginTime = date.getTime() - (period + 1) * periodMinutes / periodCount * 60000;
-                const periodEndTime = date.getTime() - period * periodMinutes / periodCount * 60000;
                 return periodBeginTime <= time && time < periodEndTime;
             });
 
             const rainHistoryInThePeriod = this.filteredRainHistories.filter(rainHistory => {
                 const time = rainHistory.date.getTime();
-                const periodBeginTime = date.getTime() - (period + 1) * periodMinutes / periodCount * 60000;
-                const periodEndTime = date.getTime() - (period) * periodMinutes / periodCount * 60000;
                 return periodBeginTime <= time && time < periodEndTime;
             });
 
             const histories = [];
             gaugeHistoryInThePeriod.forEach(positionHistory => {
+
+                let countGoodValue = 0;
                 const relatedRains = rainHistoryInThePeriod.filter(g => {
-                    const inX = (g.x - this.rangeGaugeLarge <= positionHistory.x) && (positionHistory.x <= g.x + this.rangeGaugeLarge);
-                    const inY = (g.y - this.rangeGaugeLarge <= positionHistory.y) && (positionHistory.y <= g.y + this.rangeGaugeLarge);
-                    return inX && inY;
+                    return SpeedComputing.isIn(this.rangeGaugeLarge, positionHistory, g, this.roundScale);
                 });
+
+                if (expectedRangeLength !== relatedRains.length) {
+                    console.warn('Decrease trustedIndicator because not expected length: ', expectedRangeLength, relatedRains.length);
+                    trustedIndicator = trustedIndicator * 0.99;
+                }
+
                 for (const relatedRain of relatedRains) {
                     const gaugeValue = Number.EPSILON + positionHistory.value;
                     const rainValue = Number.EPSILON + relatedRain.value;
-                    histories.push(new PositionHistory(positionHistory.id,
-                        relatedRain.date,
-                        Math.round((relatedRain.x - positionHistory.x) / this.roundScale),
-                        Math.round((relatedRain.y - positionHistory.y) / this.roundScale),
-                        gaugeValue > rainValue ? rainValue / gaugeValue : gaugeValue / rainValue,
-                        gaugeValue, rainValue));
+                    const value = gaugeValue > rainValue ? rainValue / gaugeValue : gaugeValue / rainValue;
+                    if ((1 - value) < 0.05) { // TODO var
+                        countGoodValue++;
+                    }
+                }
+
+                for (const relatedRain of relatedRains) {
+                    const gaugeValue = Number.EPSILON + positionHistory.value;
+                    const rainValue = Number.EPSILON + relatedRain.value;
+                    let value = gaugeValue > rainValue ? rainValue / gaugeValue : gaugeValue / rainValue;
+                    if ((1 - value) < 0.05) {
+                        value = (countGoodValue ? value / countGoodValue : value) * Math.pow(this.rangeGaugeLarge * 2 / this.roundScale, 2);
+                        histories.push(new PositionHistory(positionHistory.id,
+                            relatedRain.date,
+                            Math.round((relatedRain.x - positionHistory.x) / this.roundScale),
+                            Math.round((relatedRain.y - positionHistory.y) / this.roundScale),
+                            value, gaugeValue, rainValue));
+                    }
                 }
             });
             linkedGaugeAndRainHistories.push(histories);
         }
 
-        for (const each of linkedGaugeAndRainHistories) {
-            if (each.length === 0 || each.length !== linkedGaugeAndRainHistories[0].length) {
-                console.error('impossible to compute speed quality, periods are inconsistent',
-                    linkedGaugeAndRainHistories[0].length, each.length);
-                return null;
+        const lengths = linkedGaugeAndRainHistories.map(a => a.length);
+        for (let i = lengths.length - 1; i > 0; i--) {
+            if (lengths[i] === 0) {
+                linkedGaugeAndRainHistories.splice(i, 1);
             }
         }
 
-        return new SpeedMatrix(linkedGaugeAndRainHistories, center, 1, this);
+        if (linkedGaugeAndRainHistories.length < 3) {
+            console.warn('Impossible to compute speed quality, periods are inconsistent: ' + lengths);
+            trustedIndicator = trustedIndicator * 0.5;
+        }
+
+        // TODO if (countGoodValuesForAllPeriodsAndGauges < 30) {
+        //    trustedIndicator = trustedIndicator * 0.5;
+        //    smallZoneWidth = smallZoneWidth * 2;
+        // }
+
+        const range = this.rangeGaugeLarge / this.roundScale;
+        const flattenPositionRange = {xMin: -range, xMax: range, yMin: -range, yMax: range};
+
+        return new SpeedMatrix(linkedGaugeAndRainHistories, center, smallZoneWidth, this, trustedIndicator, flattenPositionRange);
     }
 
     getGaugePosition(id: string): PositionHistory {
@@ -116,12 +162,16 @@ export class SpeedComputing {
         if (found.length > 0) {
             return found[0];
         }
+
+        console.error('cannot getGaugePosition for id ', id);
         return null;
     }
 
     getRainPosition(gaugePosition: Position, speed: { x: number, y: number }): PositionHistory {
         const found = this.filteredRainHistories.filter(h =>
-            h.x === gaugePosition.x + (speed.x * this.roundScale) && h.y === gaugePosition.y + (speed.y * this.roundScale)
+            QualityTools.roundLatLng(h.x) === QualityTools.roundLatLng(gaugePosition.x + (speed.x * this.roundScale))
+            &&
+            QualityTools.roundLatLng(h.y) === QualityTools.roundLatLng(gaugePosition.y + (speed.y * this.roundScale))
         );
         if (found.length > 0) {
             return found[0];
