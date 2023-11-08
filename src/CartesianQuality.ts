@@ -3,9 +3,8 @@ import {CartesianGaugeHistory} from './history/CartesianGaugeHistory';
 import {RainComputationQuality} from 'raain-model';
 import {SpeedComputing} from './tools/SpeedComputing';
 import {PositionHistory} from './history/PositionHistory';
-import {Position} from './tools/Position';
-import {LatLng} from './tools/LatLng';
 import {SpeedMatrixContainer} from './tools/SpeedMatrixContainer';
+import {Converter} from './tools/Converter';
 
 export class CartesianQuality {
 
@@ -56,46 +55,46 @@ export class CartesianQuality {
             return this.rainComputationQuality;
         }
 
-        const dates = {minDate: undefined, maxDate: undefined};
+        const dates = {minDate: undefined, maxDate: undefined, stepInSec: undefined};
         const beforeLaunching = new Date();
 
-        const gaugeHistories = this.cartesianGaugeHistories.map(h => {
-            return new PositionHistory(h.gaugeId, new Date(h.date), h.value.lat, h.value.lng, h.value.value);
+        const gaugeHistories = this.cartesianGaugeHistories.map(gh => {
+            const position = Converter.MapLatLngToPosition(gh.value, true);
+            return new PositionHistory(gh.gaugeId, new Date(gh.date), position.x, position.y, gh.value.value);
         });
-        const rainHistories = this.cartesianRainHistories.map((h, index) => {
-            this.storeDates(dates, h);
+        const rainHistories = this.cartesianRainHistories.map((rh, index) => {
+            this.storeDates(dates, rh);
+            const position = Converter.MapLatLngToPosition(rh.computedValue, true);
             return new PositionHistory('rain' + index,
-                new Date(h.periodBegin),
-                h.computedValue.lat, h.computedValue.lng, h.computedValue.value);
+                new Date(rh.periodBegin),
+                position.x, position.y,
+                rh.computedValue.value);
         });
+
+        const periodMinutes = Math.round((dates.maxDate?.getTime() - dates.minDate?.getTime()) / 60000);
+        const periodCount = Math.round(periodMinutes * 60 / dates.stepInSec);
+
         const speedComputing = new SpeedComputing(rainHistories, gaugeHistories);
-        const speedMatrix = speedComputing.computeSpeedMatrix(dates.maxDate);
+        const speedMatrix = speedComputing.computeSpeedMatrix(dates.maxDate, {periodCount, periodMinutes});
         if (!speedMatrix) {
             throw new Error('impossible to compute Quality Speed Matrix');
         }
-
-        const maximums = {
-            rainMeasureValue: speedMatrix.getMaxRain(),
-            gaugeMeasureValue: speedMatrix.getMaxGauge()
-        };
 
         this.rainComputationQuality = new RainComputationQuality(
             'qualityId' + new Date().toISOString(),
             dates.minDate, dates.maxDate,
             [],
             0,
-            'v0.0.1');
+            'v0.0.1'); // TODO align version
         this.rainComputationQuality.qualitySpeedMatrixContainer = new SpeedMatrixContainer([speedMatrix]);
         this.rainComputationQuality.timeSpentInMs = new Date().getTime() - beforeLaunching.getTime();
         return this.rainComputationQuality;
     }
 
-    getGaugeLatLngFrom(position: Position): LatLng {
-
-        this.cartesianRainHistories.filter(h => h.computedValue.lat);
-
-        return new LatLng(position.x, position.y);
-    }
+    //  getGaugeLatLngFrom(position: Position): LatLng {
+    //      this.cartesianRainHistories.filter(h => h.computedValue.lat);
+    //      return new LatLng(position.x, position.y);
+    //  }
 
     toJSON() {
         return {
@@ -104,8 +103,9 @@ export class CartesianQuality {
         };
     }
 
-    private storeDates(dates: { minDate: Date, maxDate: Date }, cartesianRainHistory: CartesianRainHistory): void {
+    private storeDates(dates: { minDate: Date, maxDate: Date, stepInSec: number }, cartesianRainHistory: CartesianRainHistory): void {
         const historyDate = new Date(cartesianRainHistory.periodBegin);
+
         if (!dates.minDate
             || Math.min(new Date(dates.minDate).getTime(), historyDate.getTime())
             === historyDate.getTime()) {
@@ -116,6 +116,18 @@ export class CartesianQuality {
             || Math.max(new Date(dates.maxDate).getTime(), historyDate.getTime())
             === historyDate.getTime()) {
             dates.maxDate = historyDate;
+        }
+
+
+        if (!dates.stepInSec) {
+            let stepInSec = 0;
+            if (cartesianRainHistory.periodEnd) {
+                const end = new Date(cartesianRainHistory.periodEnd);
+                stepInSec = (end.getTime() - historyDate.getTime()) / 1000;
+            }
+            if (stepInSec) {
+                dates.stepInSec = stepInSec;
+            }
         }
     }
 }

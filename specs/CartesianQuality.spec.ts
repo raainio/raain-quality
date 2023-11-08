@@ -1,6 +1,8 @@
 import {CartesianGaugeHistory, CartesianQuality, CartesianRainHistory, QualityTools} from '../src';
 import {expect} from 'chai';
 import {CartesianValue} from 'raain-model';
+import * as path from 'path';
+import {readFileSync} from 'node:fs';
 
 
 describe('CartesianQuality', () => {
@@ -64,7 +66,7 @@ describe('CartesianQuality', () => {
                                  gaugeCount = 1,
                                  minDateTime = 0) {
         const minDate = new Date(minDateTime);
-        const gaugePadding = scale * 8 + scale * 1;
+        const gaugePadding = scale * 8 + scale;
         const possibleGaugePositions = [[
             QualityTools.roundLatLng(latLngMin + gaugePadding),
             QualityTools.roundLatLng(latLngMax - gaugePadding)]];
@@ -173,13 +175,15 @@ describe('CartesianQuality', () => {
         expect(rainComputationQuality.qualitySpeedMatrixContainer.getMaxRain()).eq(5.01);
 
         const matrix = rainComputationQuality.qualitySpeedMatrixContainer.getMatrix();
+        matrix.logFlatten();
         expect(matrix.getTrustedIndicator()).eq(1);
-        expect(matrix.getQualityPoints()[0].rainCartesianValue.lat).eq(-0.01);
-        expect(matrix.getQualityPoints()[0].rainCartesianValue.lng).eq(0.01);
-        expect(matrix.getQualityPoints()[0].gaugeCartesianValue.lat).eq(-0.01);
-        expect(matrix.getQualityPoints()[0].gaugeCartesianValue.lng).eq(0.01);
-        expect(matrix.getQualityPoints()[0].speed.x).eq(0);
-        expect(matrix.getQualityPoints()[0].speed.y).eq(0);
+        const qualityPoint = matrix.getQualityPoints()[0];
+        expect(qualityPoint.rainCartesianValue.lat).eq(-0.01);
+        expect(qualityPoint.rainCartesianValue.lng).eq(0.01);
+        expect(qualityPoint.gaugeCartesianValue.lat).eq(-0.01);
+        expect(qualityPoint.gaugeCartesianValue.lng).eq(0.01);
+        expect(qualityPoint.speed.x).eq(0);
+        expect(qualityPoint.speed.y).eq(0);
 
     });
 
@@ -208,25 +212,25 @@ describe('CartesianQuality', () => {
         expect(matrix.getTrustedIndicator()).eq(1);
 
         const flattenMatrix = matrix.renderFlatten();
+        matrix.logFlatten();
         expect(flattenMatrix[0].x).equal(-8);
         expect(flattenMatrix[0].y).equal(-8);
         expect(flattenMatrix[0].value).equal(0);
-        expect(flattenMatrix[288].x).equal(8);
-        expect(flattenMatrix[288].y).equal(8);
-        expect(flattenMatrix[288].value).equal(0);
-        expect(flattenMatrix[76].value).equal(625.9481037924152);
-        expect(flattenMatrix[93].value).equal(370.38515266413884);
-        expect(flattenMatrix[110].value).equal(242.6177174780527);
-        expect(flattenMatrix[127].value).equal(157.4572777445309);
-        expect(flattenMatrix[144].value).equal(93.60457385985907);
-        expect(flattenMatrix[161].value).equal(42.53904951811233);
+        expect(flattenMatrix[(17 * 17) - 1].x).equal(8);
+        expect(flattenMatrix[(17 * 17) - 1].y).equal(8);
+        expect(flattenMatrix[(17 * 17) - 1].value).equal(0);
+
+        expect(flattenMatrix[144].x).equal(0);
+        expect(flattenMatrix[144].y).equal(0);
+        expect(flattenMatrix[144].value).equal(0.2526718292230032);
+        expect(flattenMatrix[141].value).equal(0.9998004390341247);
 
         expect(matrix.getQualityPoints()[0].gaugeCartesianValue.lat).eq(-0.91);
         expect(matrix.getQualityPoints()[0].gaugeCartesianValue.lng).eq(0.91);
         expect(matrix.getQualityPoints()[0].rainCartesianValue.lat).eq(-0.95);
         expect(matrix.getQualityPoints()[0].rainCartesianValue.lng).eq(0.91);
-        expect(matrix.getQualityPoints()[0].speed.x).eq(-0.04);
-        expect(matrix.getQualityPoints()[0].speed.y).eq(0);
+        expect(matrix.getQualityPoints()[0].speed.x).eq(0);
+        expect(matrix.getQualityPoints()[0].speed.y).eq(-0.04);
 
     });
 
@@ -263,6 +267,7 @@ describe('CartesianQuality', () => {
         expect(matrix.getQualityPoints()[0].speed.y).eq(0);
 
         const flatten = matrix.renderFlatten();
+        matrix.logFlatten();
         const defaultWidth = 8 + 8 + 1;
         expect(flatten.length).eq(defaultWidth * defaultWidth);
         expect(flatten[0].x).eq(-8);
@@ -315,6 +320,7 @@ describe('CartesianQuality', () => {
         expect(matrix.getQualityPoints()[0].speed.y).eq(0);
 
         const flatten = matrix.renderFlatten();
+        matrix.logFlatten();
         const defaultWidth = 8 + 8 + 1;
         expect(flatten.length).eq(defaultWidth * defaultWidth);
         expect(flatten[0].x).eq(-8);
@@ -374,6 +380,44 @@ describe('CartesianQuality', () => {
         expect(rainComputationQuality1.qualitySpeedMatrixContainer.getQualityPoints().length).eq(4);
         expect(rainComputationQuality1.qualitySpeedMatrixContainer.getQualityPoints()[0].gaugeCartesianValue.value).eq(10);
         expect(rainComputationQuality1.qualitySpeedMatrixContainer.getQualityPoints()[0].rainCartesianValue.value).eq(10.02);
+
+    });
+
+
+    it('should getRainComputationQuality with json files', async () => {
+
+        // read files
+        const {cartesianGaugeHistories} = require('./files/555555b00000000000000007-cartesianGaugeHistories-2023-11-07T14:04:52.690Z.gitignored.json');
+        const msgpack = require('msgpack-lite');
+
+        const fileName = path.resolve(__dirname, './files/555555b00000000000000007-cartesianRainHistories-2023-11-07T14:04:52.791Z.gitignored.encoded.json');
+        const cartesianRainHistoriesEncoded = readFileSync(fileName);
+        // tslint:disable-next-line:max-line-length
+        // const cartesianRainHistoriesEncoded = require('./files/555555b00000000000000007-cartesianRainHistories-2023-11-07T14:04:52.791Z.gitignored.encoded.json')
+        const {cartesianRainHistories} = msgpack.decode(cartesianRainHistoriesEncoded);
+
+        // possible period filtering
+        const dateToConsider = new Date('2018-05-25T23:51:00+02:00'); // any sample date
+        const periodBegin = new Date(dateToConsider.getTime() - 30 * 60000); // 30 mn before
+        const cartesianRainHistoriesFiltered = cartesianRainHistories
+            .filter(crh => periodBegin.getTime() <= crh.periodBegin.getTime() && crh.periodBegin.getTime() <= dateToConsider.getTime());
+        const nonNullValues = cartesianRainHistoriesFiltered.filter(crh => crh.computedValue.value);
+        console.log('Filtering period:', dateToConsider.toISOString(),
+            ', non null values:', nonNullValues.length, 'in', cartesianRainHistoriesFiltered.length);
+
+        // Compute the quality
+        const cartesianQuality = new CartesianQuality(cartesianRainHistoriesFiltered, cartesianGaugeHistories);
+        const rainComputationQuality = await cartesianQuality.getRainComputationQuality();
+
+        // Verify results
+        const matrix = rainComputationQuality.qualitySpeedMatrixContainer.getMatrix();
+        matrix.logFlatten();
+
+        // Expected => 0
+        // TODO check if we are improving ?
+        expect(rainComputationQuality.qualitySpeedMatrixContainer.getQuality()).lessThanOrEqual(0.073);
+        expect(rainComputationQuality.qualitySpeedMatrixContainer.getMaxGauge()).eq(5.003);
+        expect(rainComputationQuality.qualitySpeedMatrixContainer.getMaxRain()).eq(5.011);
 
     });
 

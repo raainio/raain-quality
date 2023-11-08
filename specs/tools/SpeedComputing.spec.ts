@@ -15,7 +15,7 @@ describe('SpeedComputing', () => {
         }
         const rainHistories: PositionHistory[] = [];
         const gaugeHistories: PositionHistory[] = [];
-        let count;
+        let count = 0;
 
         for (let period = 0; period < periodCount; period++) {
             const measureRainDate = new Date(minDate.getTime() + period * 60000 * 5);
@@ -59,17 +59,85 @@ describe('SpeedComputing', () => {
         return {rainHistories, gaugeHistories};
     }
 
+    function getPreparedScenarioWeight(minDate: Date) {
+        const width = 20;
+        const gaugePositions = [[-4, -5], [-2, -7], [2, 2]];
+        const gaugeValues = [2, 10, 12];
+        const rainRelativePositions = [[1, 2], [1, 3], [-8, 3]];
+        const rainXDiffusion = [1, 3, 16];
+        const periodCount = 4;
+        const periodStepInMn = 5;
+
+        const rainHistories: PositionHistory[] = [];
+        const gaugeHistories: PositionHistory[] = [];
+        let count = 0;
+
+        for (let period = 0; period < periodCount; period++) {
+            const measureRainDate = new Date(minDate.getTime() + period * 60000 * periodStepInMn);
+            const measureGaugeDate = new Date(minDate.getTime() + period * 60000 * periodStepInMn + 10000);
+
+            count = 0;
+            for (let x = -width; x <= width; x++) {
+                for (let y = -width; y <= width; y++) {
+                    const gaugeIndex = QualityTools.indexOfDualArray(gaugePositions, [x, y]);
+                    if (gaugeIndex >= 0) {
+                        const gaugeHistory = new PositionHistory(
+                            'gauge' + count++,
+                            measureGaugeDate, x, y,
+                            gaugeValues[gaugeIndex]);
+                        gaugeHistories.push(gaugeHistory);
+                    }
+                }
+            }
+
+            count = 0;
+            for (let x = -width; x <= width; x++) {
+                for (let y = -width; y <= width; y++) {
+                    count++;
+                    const rainHistory = new PositionHistory(
+                        'rain' + count, measureRainDate, x, y, 0);
+                    rainHistories.push(rainHistory);
+                }
+            }
+
+            count = 0;
+            for (let x = -width; x <= width; x++) {
+                for (let y = -width; y <= width; y++) {
+                    count++;
+                    const gaugeIndex = QualityTools.indexOfDualArray(gaugePositions, [x, y]);
+                    if (gaugeIndex >= 0) {
+                        const position = rainRelativePositions[gaugeIndex];
+                        const diffusion = rainXDiffusion[gaugeIndex];
+
+                        for (let i = 0; i < diffusion; i++) {
+                            const founds = rainHistories.filter(rh =>
+                                rh.x === x + position[0] + i && rh.y === y + position[1]
+                                && rh.date.getTime() === measureRainDate.getTime());
+                            const pixelToChange = founds[0];
+                            const gaugeValue = gaugeValues[gaugeIndex];
+                            pixelToChange.valueFromGauge = gaugeValue;
+                            pixelToChange.value = gaugeValue + 0.001 * diffusion;
+                            pixelToChange.valueFromRain = gaugeValue + 0.001 * diffusion;
+                        }
+                    }
+                }
+            }
+        }
+        return {rainHistories, gaugeHistories};
+    }
+
     it('should get non trusted matrix with non valid values on empty history', () => {
         const speedComputing = new SpeedComputing([], []);
         const speedMatrix = speedComputing.computeSpeedMatrix(new Date());
 
+        speedMatrix.logFlatten();
         expect(speedMatrix.getTrustedIndicator()).eq(0.5);
         expect(speedMatrix.isConsistent()).eq(false);
     });
 
     it('should get matrix for five gauges', () => {
 
-        // Prepare scenario : simple 10x10 map with 1 gauge == 1 rain
+        // Prepare scenario : simple 10x10 map with each gauge == rain
         const periodCount = 7;
         const scenario = getPreparedScenario(new Date('2000-01-01T01:00:00.000Z'), 20, 0, 5, periodCount);
 
@@ -84,13 +152,14 @@ describe('SpeedComputing', () => {
         expect(speedMatrix.getMaxGauge()).eq(9);
 
         const flatten = speedMatrix.renderFlatten();
+        speedMatrix.logFlatten();
         expect(flatten.length).eq(5 * 5);
         expect(flatten[0].x).eq(-2);
         expect(flatten[0].y).eq(-2);
         expect(flatten[0].value).eq(0);
         expect(flatten[12].x).eq(0);
         expect(flatten[12].y).eq(0);
-        expect(flatten[12].value).eq(558.5755555555556);
+        expect(flatten[12].value).eq(1);
 
         expect(speedMatrix.getGaugeIdRelatedValues(scenario.gaugeHistories[0].id).gaugeCartesianValue.value)
             .eq(scenario.gaugeHistories[0].value);
@@ -110,6 +179,32 @@ describe('SpeedComputing', () => {
         expect(speedMatrix.isConsistent()).eq(true);
     });
 
+    it('should get matrix for 3 gauges and different weight', () => {
+
+        const scenario = getPreparedScenarioWeight(new Date('2000-01-01T01:00:00.000Z'));
+
+        // Compute the speed
+        const speedComputing = new SpeedComputing(scenario.rainHistories, scenario.gaugeHistories, 8, 1);
+        const speedMatrix = speedComputing.computeSpeedMatrix(new Date('2000-01-01T01:15:00.000Z'),
+            {periodCount: 3, periodMinutes: 15});
+
+        // Verify results
+        speedMatrix.logFlatten();
+        expect(speedMatrix.getQualityPoints().length).eq(3);
+        expect(speedMatrix.getMaxRain()).eq(12.016);
+        expect(speedMatrix.getMaxGauge()).eq(12);
+        expect(speedMatrix.isConsistent()).eq(true);
+
+        const flatten = speedMatrix.renderFlatten();
+        expect(flatten.length).eq(17 * 17);
+        expect(flatten[0].x).eq(-8);
+        expect(flatten[0].y).eq(-8);
+        expect(flatten[0].value).eq(0);
+        // expect(flatten[12].x).eq(0);
+        // expect(flatten[12].y).eq(0);
+        // expect(flatten[12].value).eq(558.5755555555556);
+    });
+
     it('should get matrix speed for big images', () => {
 
         const periodCount = 7;
@@ -122,6 +217,7 @@ describe('SpeedComputing', () => {
             {periodCount, periodMinutes: 35});
 
         // Verify results
+        speedMatrix.logFlatten();
         expect(speedMatrix.getQualityPoints().length).eq(34);
         expect(speedMatrix.getMaxGauge()).eq(38);
         expect(speedMatrix.getMaxRain()).eq(37.67);
@@ -159,6 +255,7 @@ describe('SpeedComputing', () => {
         const speedMatrixContainer = new SpeedMatrixContainer(matrices);
 
         // Verify results
+        speedMatrixContainer.getMatrix().logFlatten();
         expect(speedMatrixContainer.getQualityPoints().length).eq(20);
         expect(speedMatrixContainer.getMaxGauge()).eq(720);
         expect(speedMatrixContainer.getMaxRain()).eq(714.2999999999995);
