@@ -115,9 +115,10 @@ describe('SpeedComputing', () => {
                                 && rh.date.getTime() === measureRainDate.getTime());
                             const pixelToChange = founds[0];
                             const gaugeValue = gaugeValues[gaugeIndex];
+                            const rainValue = (gaugeValue + 0.001 * diffusion) * 12;
                             pixelToChange.valueFromGauge = gaugeValue;
-                            pixelToChange.value = gaugeValue + 0.001 * diffusion;
-                            pixelToChange.valueFromRain = gaugeValue + 0.001 * diffusion;
+                            pixelToChange.value = rainValue;
+                            pixelToChange.valueFromRain = rainValue;
                         }
                     }
                 }
@@ -191,7 +192,7 @@ describe('SpeedComputing', () => {
         // Verify results
         speedMatrix.logFlatten();
         expect(speedMatrix.getQualityPoints().length).eq(3);
-        expect(speedMatrix.getMaxRain()).eq(12.016);
+        expect(speedMatrix.getMaxRain()).eq(144.192);
         expect(speedMatrix.getMaxGauge()).eq(12);
         expect(speedMatrix.isConsistent()).eq(true);
 

@@ -6,7 +6,19 @@ import {QualityTools} from './QualityTools';
 
 export class SpeedComputing {
 
-    private static FILTER_RATIO = 0.25;
+    private static FILTER_RATIO = 0.05;  // <=== TODO PLAY
+    private static GAUGE_I = [0, 2.4, 4.8, 7.2, 9.6, 12.0, 13.2, 14.4, 15.6, 16.8, 18.0, 19.2, 20.4,
+        21.6, 22.8, 24.0, 25.2, 26.4, 27.6, 28.8, 30.0, 31.2, 32.4, 33.6, 34.8, 36.0, 37.2, 38.4, 39.6,
+        40.8, 42.0, 43.2, 44.4, 45.6, 46.8, 48.0, 49.2, 50.4, 51.6, 52.8, 54.0, 55.2, 56.4, 57.6, 58.8,
+        60.0, 61.2, 62.4, 63.6, 64.8, 66.0, 67.2, 68.4, 69.6, 70.8, 72.0, 73.2, 74.4, 75.6, 76.8, 78.0,
+        79.2, 80.4, 81.6, 82.8, 84.0, 85.2, 86.4, 87.6, 88.8, 90.0, 91.2, 92.4, 93.6, 94.8, 96.0, 97.2,
+        98.4, 99.6, 100.8, 102.0, 103.2, 104.4, 105.6, 106.8, 108.0, 109.2, 110.4, 111.6, 112.8, 114.0,
+        115.2, 116.4, 117.6, 118.8, 120.0, 121.2, 122.4, 123.6, 124.8, 126.0, 127.2, 128.4, 129.6, 130.8,
+        132.0, 133.2, 134.4, 135.6, 136.8, 138.0, 139.2, 140.4, 141.6, 142.8, 144.0, 145.2, 146.4, 147.6,
+        148.8, 150.0, 151.2, 152.4, 153.6, 154.8, 156.0, 157.2, 158.4, 159.6, 160.8, 162.0, 163.2, 164.4,
+        165.6, 166.8, 168.0, 169.2, 170.4, 171.6, 172.8, 174.0, 175.2, 176.4, 177.6, 178.8, 180.0, 181.2,
+        182.4, 183.6, 184.8, 186.0, 187.2, 188.4, 189.6, 190.8, 192.0, 193.2, 194.4, 195.6, 196.8
+    ];
 
     private filteredRainHistories: PositionHistory[];
     private filteredGaugeHistories: PositionHistory[];
@@ -21,7 +33,7 @@ export class SpeedComputing {
         this.filteredGaugeHistories = gaugeHistories;
     }
 
-    static isIn(rangeGaugeLarge: number, valueXY: { x: number, y: number }, compareXY: { x: number, y: number }, scale: number): boolean {
+    static isIn(rangeGaugeLarge: number, valueXY: { x: number, y: number }, compareXY: Position, scale: number): boolean {
 
         const xBefore = Math.round((compareXY.x - rangeGaugeLarge) / scale);
         const xAfter = Math.round((compareXY.x + rangeGaugeLarge) / scale);
@@ -37,6 +49,14 @@ export class SpeedComputing {
         return inX && inY;
     }
 
+    private static GetIntensity(v) {
+        // return Number.EPSILON + v;
+        const closest = SpeedComputing.GAUGE_I.reduce((prev, curr) => {
+            return (Math.abs(curr - v) < Math.abs(prev - v) ? curr : prev);
+        });
+        return closest;
+    }
+
     public computeSpeedMatrix(date: Date,
                               options: {
                                   periodCount: number,
@@ -49,23 +69,38 @@ export class SpeedComputing {
         const dateTimeMinusXmin = dateTime - periodMinutes * 60000;
         const periodLength = Math.round(options.periodMinutes / options.periodCount);
         let trustedIndicator = SpeedMatrix.DEFAULT_TRUSTED_INDICATOR;
+        const GAUGE_FLOW_RATIO = 12;
 
-        // filter gauge history in the period; more open for gauge to include possible delay
-        this.filteredGaugeHistories = this.gaugeHistories.filter(g => {
-            if (g.value <= 0) {
-                return false;
-            }
-
-            const time = g.date.getTime();
-            // console.log('filteredGaugeHistories',
-            //     new Date(dateTimeMinusXmin).toISOString(), '<=', g.date.toISOString(), '<=', date.toISOString());
-            return dateTimeMinusXmin <= time && (time - periodLength * 60000) <= dateTime;
-        })
-            .map(g => new PositionHistory(g.id, g.date, g.x, g.y, g.value * 12, g.valueFromGauge, g.valueFromRain)) // mm/h
+        // 1) filter gauge history non-null values in the period
+        const filteredGaugeHistories = this.gaugeHistories
+            .filter(g => {
+                if (g.value <= 0) {
+                    return false;
+                }
+                const time = g.date.getTime();
+                // console.log('filteredGaugeHistories',
+                //     new Date(dateTimeMinusXmin).toISOString(), '<=', g.date.toISOString(), '<=', date.toISOString());
+                return dateTimeMinusXmin <= time && (time - periodLength * 60000) <= dateTime;
+            });
+        const filteredGaugesHistoriesDesc = filteredGaugeHistories
             .sort((a, b) => b.date.getTime() - a.date.getTime());
+        // const filteredGaugesHistoriesAsc = filteredGaugeHistories
+        //    .sort((a, b) => a.date.getTime() - b.date.getTime());
 
-        // filter rain history in the period and near to gauge
+        // const filteredGaugesHistoriesWithoutFirstValues = filteredGaugesHistoriesDesc
+        //     .filter((g, index) => {
+        //         const sameValues = filteredGaugesHistoriesAsc.filter(ga => ga.id === g.id);
+        //         return sameValues[0] !== g;
+        //     });
+
+        filteredGaugesHistoriesDesc
+            .forEach(g => g.value = g.value * GAUGE_FLOW_RATIO);
+        this.filteredGaugeHistories = filteredGaugesHistoriesDesc;
+
+        // 2) filter rain history in the period and near gauges
         let cornerLow, cornerHigh;
+        const gaugePositions = Position.uniq(
+            this.filteredGaugeHistories.map(positionHistory => new Position(positionHistory.x, positionHistory.y)));
         const partOfGaugesAreaAndInThePeriod = (rainPositionHistory: PositionHistory) => {
             const time = rainPositionHistory.date.getTime();
             // console.log('filteredRainHistories',
@@ -75,9 +110,10 @@ export class SpeedComputing {
                 return false;
             }
 
-            const contains = this.filteredGaugeHistories.filter(g => {
-                return SpeedComputing.isIn(this.rangeGaugeLarge, rainPositionHistory, g, this.roundScale);
-            });
+            const contains = gaugePositions
+                .filter(gaugePosition => {
+                    return SpeedComputing.isIn(this.rangeGaugeLarge, rainPositionHistory, gaugePosition, this.roundScale);
+                });
 
             if (contains.length > 0) {
                 if (!cornerLow) {
@@ -98,11 +134,9 @@ export class SpeedComputing {
             }
             return false;
         };
-        const filteredRains = this.rainHistories.filter(v => partOfGaugesAreaAndInThePeriod(v))
+        const filteredRainsAndSorted = this.rainHistories.filter(v => partOfGaugesAreaAndInThePeriod(v))
             .sort((a, b) => b.date.getTime() - a.date.getTime());
-        // const cumulRains = filteredRains.map(ph =>
-        //    new PositionHistory(ph.id, ph.date, ph.x, ph.y, ph.value / 12, ph.valueFromRain, ph.valueFromGauge));
-        this.filteredRainHistories = filteredRains;
+        this.filteredRainHistories = filteredRainsAndSorted;
 
         if (!cornerLow) {
             cornerLow = new Position(0, 0);
@@ -115,7 +149,7 @@ export class SpeedComputing {
             Math.round((cornerHigh.x + cornerLow.x) / (2 * this.roundScale)),
             Math.round((cornerHigh.y + cornerLow.y) / (2 * this.roundScale)));
 
-        // on each period, store gauge history related to rain values area
+        // 3) on each period, store gauge history related to rain values area
         const smallZoneWidth = SpeedMatrix.DEFAULT_ZONE_RANGE;
         const expectedRangeLength = Math.pow(2 * (this.rangeGaugeLarge / this.roundScale) + 1, 2);
         const linkedGaugeAndRainHistories: PositionHistory[][] = [];
@@ -140,7 +174,7 @@ export class SpeedComputing {
             });
 
             const histories = [];
-            gaugeHistoryInThePeriod.forEach(positionHistory => {
+            for (const positionHistory of gaugeHistoryInThePeriod) {
 
                 let countGoodValue = 0;
                 const relatedRains = rainHistoryInThePeriod.filter(g => {
@@ -154,8 +188,8 @@ export class SpeedComputing {
                 }
 
                 for (const relatedRain of relatedRains) {
-                    const gaugeValue = Number.EPSILON + positionHistory.value;
-                    const rainValue = Number.EPSILON + relatedRain.value;
+                    const gaugeValue = SpeedComputing.GetIntensity(positionHistory.value);
+                    const rainValue = SpeedComputing.GetIntensity(relatedRain.value);
                     const value = gaugeValue > rainValue ? rainValue / gaugeValue : gaugeValue / rainValue;
                     if ((1 - value) < SpeedComputing.FILTER_RATIO) {
                         countGoodValue++;
@@ -163,8 +197,8 @@ export class SpeedComputing {
                 }
 
                 for (const relatedRain of relatedRains) {
-                    const gaugeValue = Number.EPSILON + positionHistory.value;
-                    const rainValue = Number.EPSILON + relatedRain.value;
+                    const gaugeValue = SpeedComputing.GetIntensity(positionHistory.value);
+                    const rainValue = SpeedComputing.GetIntensity(relatedRain.value);
                     const value = gaugeValue > rainValue ? rainValue / gaugeValue : gaugeValue / rainValue;
                     if ((1 - value) < SpeedComputing.FILTER_RATIO) {
                         const weightValue = (countGoodValue ? value / countGoodValue : value)
@@ -173,13 +207,16 @@ export class SpeedComputing {
                             relatedRain.date,
                             Math.round((relatedRain.x - positionHistory.x) / this.roundScale),
                             Math.round((relatedRain.y - positionHistory.y) / this.roundScale),
-                            weightValue, gaugeValue, rainValue));
+                            weightValue,
+                            positionHistory.value / GAUGE_FLOW_RATIO,
+                            relatedRain.value));
                     }
                 }
-            });
+            }
             linkedGaugeAndRainHistories.push(histories);
         }
 
+        // 4) build matrix
         const lengths = linkedGaugeAndRainHistories.map(a => a.length);
         for (let i = lengths.length - 1; i > 0; i--) {
             if (lengths[i] === 0) {
@@ -215,9 +252,11 @@ export class SpeedComputing {
 
     getRainPosition(gaugePosition: Position, speed: { x: number, y: number }): PositionHistory {
         const found = this.filteredRainHistories.filter(h =>
-            QualityTools.roundLatLng(h.x) === QualityTools.roundLatLng(gaugePosition.x + (speed.x * this.roundScale))
+            QualityTools.roundLatLng(h.x, CartesianQuality.DEFAULT_SCALE, true)
+            === QualityTools.roundLatLng(gaugePosition.x + (speed.x * this.roundScale), CartesianQuality.DEFAULT_SCALE, true)
             &&
-            QualityTools.roundLatLng(h.y) === QualityTools.roundLatLng(gaugePosition.y + (speed.y * this.roundScale))
+            QualityTools.roundLatLng(h.y, CartesianQuality.DEFAULT_SCALE, true)
+            === QualityTools.roundLatLng(gaugePosition.y + (speed.y * this.roundScale), CartesianQuality.DEFAULT_SCALE, true)
         );
         if (found.length > 0) {
             return found[0];

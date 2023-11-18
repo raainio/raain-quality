@@ -7,9 +7,11 @@ import {Converter} from './Converter';
 
 export class SpeedMatrix {
 
+    public static DEFAULT_MATRIX_RANGE = 8;
     public static DEFAULT_ZONE_RANGE = 2;
     public static DEFAULT_TRUSTED_INDICATOR = 1;
-    public static DEFAULT_MATRIX_RANGE = 8;
+    private static WEIGHT_ON = false;  // <=== TODO PLAY
+    private static WEIGHT_RATIO = 0.2;  // <=== TODO PLAY
 
     protected flattenPositionHistory: number[][];
     protected flattenSpeedPosition: Position;
@@ -98,7 +100,7 @@ export class SpeedMatrix {
         // if (options.square) {
         //     // show a square around the flattenSpeedPosition
         //     const squareWidth = 1;
-        //     positionHistories.forEach(p => {
+        //     for (const p of positionHistories) {
         //         const inTheSquareX = this.flattenSpeedPosition.x - squareWidth <= p.x
         //         && p.x <= this.flattenSpeedPosition.x + squareWidth;
         //         const inTheSquareY = this.flattenSpeedPosition.y - squareWidth <= p.y
@@ -106,7 +108,7 @@ export class SpeedMatrix {
         //         if (inTheSquareX && inTheSquareY) {
         //             p.value = maxValue;
         //         }
-        //     });
+        //     }
         // }
 
         return positionHistories;
@@ -172,23 +174,23 @@ export class SpeedMatrix {
         const rainLatLng = Converter.MapPositionToLatLng(rainPosition);
         const rainDate = rainPosition?.date;
         const rainValue = rainPosition?.value;
-        speed = this.speedComputing.getRelativeSpeed(speed);
+        const relativeSpeed = this.speedComputing.getRelativeSpeed(speed);
 
         const qualityPoint = new QualityPoint(id, gaugeDate, rainDate,
             new CartesianValue(gaugeValue, gaugeLatLng.lat, gaugeLatLng.lng),
             new CartesianValue(rainValue, rainLatLng.lat, rainLatLng.lng),
-            speed);
+            relativeSpeed);
 
         return qualityPoint;
     }
 
     getGaugeIds(): string[] {
         const gaugeIds = [];
-        this.periods[0]?.forEach(p => {
+        for (const p of this.periods[0] ? this.periods[0] : []) {
             if (gaugeIds.indexOf(p.id) < 0) {
                 gaugeIds.push(p.id);
             }
-        });
+        }
         return gaugeIds;
     }
 
@@ -212,14 +214,18 @@ export class SpeedMatrix {
     getMaxRain(): number {
         const qualityPoints = this.getQualityPoints();
         let max = -1;
-        qualityPoints.forEach(p => max = Math.max(max, p.rainCartesianValue.value));
+        for (const p of qualityPoints) {
+            max = Math.max(max, p.rainCartesianValue.value);
+        }
         return max;
     }
 
     getMaxGauge(): number {
         const qualityPoints = this.getQualityPoints();
         let max = -1;
-        qualityPoints.forEach(p => max = Math.max(max, p.gaugeCartesianValue.value));
+        for (const p of qualityPoints) {
+            max = Math.max(max, p.gaugeCartesianValue.value);
+        }
         return max;
     }
 
@@ -250,7 +256,11 @@ export class SpeedMatrix {
         return json;
     }
 
-    logFlatten() {
+    logFlatten(overridingLogger?, simplify?: boolean) {
+        let logger = overridingLogger;
+        if (!logger) {
+            logger = console;
+        }
         const flatten = this.renderFlatten();
 
         const labelWithSign = (val) => {
@@ -267,12 +277,27 @@ export class SpeedMatrix {
         const labelY = (y) => {
             return 'y' + labelWithSign(y - this.flattenPositionRange.yMax);
         };
+        const valueDisplay = (v) => {
+            if (simplify) {
+                if (v === 1) {
+                    return '##';
+                } else if (v >= 0.8) {
+                    return '#';
+                } else if (v >= 0.5) {
+                    return '=';
+                } else if (v >= 0.2) {
+                    return '_';
+                }
+                return ' ';
+            }
+            return Math.round(v * 100) / 100;
+        }
 
         const matrixToRender = {};
         for (let y = this.flattenPositionRange.yMax - this.flattenPositionRange.yMin; y >= 0; y--) {
             const xObject = {};
             for (let x = 0; x <= this.flattenPositionRange.xMax - this.flattenPositionRange.xMin; x++) {
-                xObject[labelX(x)] = 0;
+                xObject[labelX(x)] = valueDisplay(0);
             }
             matrixToRender[labelY(y)] = xObject;
         }
@@ -281,12 +306,12 @@ export class SpeedMatrix {
                 const value = flatten.filter(p => p.x === x && p.y === y)[0];
                 const yOfMatrix = y - this.flattenPositionRange.yMin; // this.flattenPositionRange.yMax - y;
                 const xOfMatrix = x - this.flattenPositionRange.xMin;
-                matrixToRender[labelY(yOfMatrix)][labelX(xOfMatrix)] = Math.round(value.value * 1000) / 1000;
+                matrixToRender[labelY(yOfMatrix)][labelX(xOfMatrix)] = valueDisplay(value.value);
             }
         }
 
-        console.log('this.flattenSpeedPosition:', this.flattenSpeedPosition);
-        console.table(matrixToRender);
+        logger.log('this.flattenSpeedPosition=', this.flattenSpeedPosition);
+        logger.table(matrixToRender);
     }
 
     protected findMax(oldValue, newValue) {
@@ -318,7 +343,11 @@ export class SpeedMatrix {
             for (const position of period) {
                 const positionX = position.x - this.flattenPositionRange.xMin;
                 const positionY = position.y - this.flattenPositionRange.yMin;
-                this.flattenPositionHistory[positionX][positionY] += (position.value / (index + 1));
+                let weight = 1;
+                if (SpeedMatrix.WEIGHT_ON) {
+                    weight = SpeedMatrix.WEIGHT_RATIO / (index + 1);
+                }
+                this.flattenPositionHistory[positionX][positionY] += position.value * weight;
             }
         }
 

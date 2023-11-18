@@ -1,8 +1,8 @@
-import {CartesianGaugeHistory, CartesianQuality, CartesianRainHistory, QualityTools} from '../src';
+import {CartesianGaugeHistory, CartesianQuality, CartesianRainHistory, Converter, LatLng, QualityTools} from '../src';
 import {expect} from 'chai';
-import {CartesianValue} from 'raain-model';
+import {CartesianValue, RainPolarMeasureValue} from 'raain-model';
 import * as path from 'path';
-import {readFileSync} from 'node:fs';
+import * as fs from 'fs';
 
 
 describe('CartesianQuality', () => {
@@ -18,10 +18,11 @@ describe('CartesianQuality', () => {
 
                 const gaugeIndex = QualityTools.indexOfDualArray(possibleGaugePositions, [latitude, longitude]);
                 if (gaugeIndex >= 0) {
+                    const gaugeValue = 5 + gaugeIndex * 0.001;
                     const cartesianGaugeHistory = new CartesianGaugeHistory(
                         'gauge' + gaugeIndex,
                         measureDate1,
-                        new CartesianValue(5 + gaugeIndex * 0.001, latitude, longitude));
+                        new CartesianValue(gaugeValue, latitude, longitude));
                     cartesianGaugeHistories.push(cartesianGaugeHistory);
                 }
             }
@@ -47,10 +48,11 @@ describe('CartesianQuality', () => {
                 const gaugeIndex = QualityTools.indexOfDualArray(possibleGaugePositions,
                     [QualityTools.roundLatLng(latitude - gaugeTranslation), longitude]);
                 if (gaugeIndex >= 0) {
+                    const rainValue = (5.01 + gaugeIndex * 0.001) * 12;
                     cartesianRainHistory = new CartesianRainHistory(
                         measureDate1,
                         measureDate2,
-                        new CartesianValue(5.01 + gaugeIndex * 0.001, latitude, longitude));
+                        new CartesianValue(rainValue, latitude, longitude));
                 }
 
                 cartesianRainHistories.push(cartesianRainHistory);
@@ -66,6 +68,7 @@ describe('CartesianQuality', () => {
                                  gaugeCount = 1,
                                  minDateTime = 0) {
         const minDate = new Date(minDateTime);
+        let lastDate = minDate;
         const gaugePadding = scale * 8 + scale;
         const possibleGaugePositions = [[
             QualityTools.roundLatLng(latLngMin + gaugePadding),
@@ -90,11 +93,12 @@ describe('CartesianQuality', () => {
         for (let mnStep = 0; mnStep < 30; mnStep += 5) {
             const rainDate = new Date(minDate);
             rainDate.setMinutes(rainDate.getMinutes() + mnStep);
+            lastDate = rainDate;
             cartesianRainHistories.push.apply(cartesianRainHistories,
                 prepareRains(latLngMin, latLngMax, scale, rainDate, possibleGaugePositions, gaugeTranslation));
         }
 
-        return {cartesianRainHistories, cartesianGaugeHistories};
+        return {cartesianRainHistories, cartesianGaugeHistories, date: lastDate};
     }
 
     function getPreparedMovingScenario(latLngMin = -0.1,
@@ -104,6 +108,7 @@ describe('CartesianQuality', () => {
                                        gaugeCount = 1,
                                        minDateTime = 0) {
         const minDate = new Date(minDateTime);
+        let lastDate = minDate;
         const gaugePadding = scale * 9;
         const possibleGaugePositions = [[
             QualityTools.roundLatLng(latLngMin + gaugePadding),
@@ -129,27 +134,27 @@ describe('CartesianQuality', () => {
             const rainDate = new Date(minDate);
             const stepIndex = 1 + (mnStep / 5);
             rainDate.setMinutes(rainDate.getMinutes() + mnStep);
+            lastDate = rainDate;
 
             const possibleRainPositions = [];
-            possibleGaugePositions.forEach(gp => {
-
+            for (const gp of possibleGaugePositions) {
                 for (let i = 0; i < stepIndex; i++) {
                     possibleRainPositions.push([
                         QualityTools.roundLatLng(gp[0] + gaugeTranslation + i * scale),
                         QualityTools.roundLatLng(gp[1])]);
                 }
-            });
+            }
 
             cartesianRainHistories.push.apply(cartesianRainHistories,
                 prepareRains(latLngMin, latLngMax, scale, rainDate, possibleRainPositions, 0));
         }
 
-        return {cartesianRainHistories, cartesianGaugeHistories};
+        return {cartesianRainHistories, cartesianGaugeHistories, date: lastDate};
     }
 
     it('should getRainComputationQuality undefined by default', async () => {
         const cartesianQuality = new CartesianQuality([], []);
-        const rainComputationQuality = await cartesianQuality.getRainComputationQuality();
+        const rainComputationQuality = await cartesianQuality.getRainComputationQuality(new Date());
 
         expect(rainComputationQuality.qualitySpeedMatrixContainer).eq(undefined);
     });
@@ -161,12 +166,12 @@ describe('CartesianQuality', () => {
 
         // Compute the quality
         const cartesianQuality = new CartesianQuality(scenario.cartesianRainHistories, scenario.cartesianGaugeHistories);
-        const rainComputationQuality = await cartesianQuality.getRainComputationQuality();
+        const rainComputationQuality = await cartesianQuality.getRainComputationQuality(scenario.date);
 
         // Verify results
         expect(rainComputationQuality.qualitySpeedMatrixContainer.getQualityPoints().length).eq(1);
         expect(rainComputationQuality.qualitySpeedMatrixContainer.getQualityPoints()[0].gaugeId).eq('gauge0');
-        expect(rainComputationQuality.qualitySpeedMatrixContainer.getQualityPoints()[0].rainCartesianValue.value).eq(5.01);
+        expect(rainComputationQuality.qualitySpeedMatrixContainer.getQualityPoints()[0].rainCartesianValue.value).eq(60.12);
         expect(rainComputationQuality.qualitySpeedMatrixContainer.getQualityPoints()[0].gaugeCartesianValue.value).eq(5);
 
         expect(rainComputationQuality.qualitySpeedMatrixContainer.getQuality()).eq(0.009999999999999787);
@@ -195,7 +200,7 @@ describe('CartesianQuality', () => {
 
         // Compute the quality
         const cartesianQuality = new CartesianQuality(scenario.cartesianRainHistories, scenario.cartesianGaugeHistories);
-        const rainComputationQuality = await cartesianQuality.getRainComputationQuality();
+        const rainComputationQuality = await cartesianQuality.getRainComputationQuality(scenario.date);
 
         // Verify results
         expect(rainComputationQuality.qualitySpeedMatrixContainer.getQualityPoints().length).eq(1);
@@ -240,10 +245,8 @@ describe('CartesianQuality', () => {
         const scenario = getPreparedScenario(-1, +1, CartesianQuality.DEFAULT_SCALE, 0, 4);
 
         // Compute the quality
-        console.log(new Date().toISOString(), 'begin');
         const cartesianQuality = new CartesianQuality(scenario.cartesianRainHistories, scenario.cartesianGaugeHistories);
-        const rainComputationQuality = await cartesianQuality.getRainComputationQuality();
-        console.log(new Date().toISOString(), 'end');
+        const rainComputationQuality = await cartesianQuality.getRainComputationQuality(scenario.date);
 
         // Verify results
         expect(rainComputationQuality.qualitySpeedMatrixContainer.getQuality()).eq(0.008749999999999813);
@@ -281,7 +284,7 @@ describe('CartesianQuality', () => {
         expect(flatten[144].value).eq(1532.9350492338667);
 
         // Get the cached result
-        const rainComputationQualityCached = await cartesianQuality.getRainComputationQuality();
+        const rainComputationQualityCached = await cartesianQuality.getRainComputationQuality(scenario.date);
 
         // Verify same results
         expect(rainComputationQuality).eq(rainComputationQualityCached);
@@ -293,10 +296,8 @@ describe('CartesianQuality', () => {
         const scenario = getPreparedScenario(40, 42, CartesianQuality.DEFAULT_SCALE, 0.01, 4);
 
         // Compute the quality
-        console.log(new Date().toISOString(), 'begin');
         const cartesianQuality = new CartesianQuality(scenario.cartesianRainHistories, scenario.cartesianGaugeHistories);
-        const rainComputationQuality = await cartesianQuality.getRainComputationQuality();
-        console.log(new Date().toISOString(), 'end');
+        const rainComputationQuality = await cartesianQuality.getRainComputationQuality(scenario.date);
 
         // Verify results
         expect(rainComputationQuality.qualitySpeedMatrixContainer.getQuality()).eq(0.008749999999999813);
@@ -334,7 +335,7 @@ describe('CartesianQuality', () => {
         expect(flatten[129].value).eq(766.7737750601372);
 
         // Get the cached result
-        const rainComputationQualityCached = await cartesianQuality.getRainComputationQuality();
+        const rainComputationQualityCached = await cartesianQuality.getRainComputationQuality(scenario.date);
 
         // Verify same results
         expect(rainComputationQuality).eq(rainComputationQualityCached);
@@ -345,9 +346,9 @@ describe('CartesianQuality', () => {
         const scenario1 = getPreparedScenario(40, 42, CartesianQuality.DEFAULT_SCALE, -0.01, 4, 0);
         const scenario2 = getPreparedScenario(40, 42, CartesianQuality.DEFAULT_SCALE, -0.02, 4, 30 * 60000); // 30 min later
         const cartesianQuality1 = new CartesianQuality(scenario1.cartesianRainHistories, scenario1.cartesianGaugeHistories);
-        const rainComputationQuality1 = await cartesianQuality1.getRainComputationQuality();
+        const rainComputationQuality1 = await cartesianQuality1.getRainComputationQuality(scenario1.date);
         const cartesianQuality2 = new CartesianQuality(scenario2.cartesianRainHistories, scenario2.cartesianGaugeHistories);
-        const rainComputationQuality2 = await cartesianQuality2.getRainComputationQuality();
+        const rainComputationQuality2 = await cartesianQuality2.getRainComputationQuality(scenario2.date);
 
         expect(rainComputationQuality1.periodBegin.getTime()).eq(new Date(0).getTime());
         expect(rainComputationQuality2.periodBegin.getTime()).eq(new Date(30 * 60000).getTime());
@@ -383,42 +384,60 @@ describe('CartesianQuality', () => {
 
     });
 
-
-    it('should getRainComputationQuality with json files', async () => {
+    it('should getRainComputationQuality with Json files', async () => {
 
         // read files
-        const {cartesianGaugeHistories} = require('./files/555555b00000000000000007-cartesianGaugeHistories-2023-11-07T14:04:52.690Z.gitignored.json');
-        const msgpack = require('msgpack-lite');
+        let cartesianGaugeHistories, center, lastDate;
+        const measures = [];
+        const filesPath = path.resolve(__dirname, 'files');
+        const files = fs.readdirSync(filesPath, {withFileTypes: true});
+        for (const file of files) {
+            if (file.isFile() && file.name.indexOf('cartesianGaugeHistories') >= 0) {
+                cartesianGaugeHistories = require(path.resolve(filesPath, file.name)).cartesianGaugeHistories;
+            }
+            if (file.isFile() && file.name.indexOf('rainNode') >= 0) {
+                const rainNode = require(path.resolve(filesPath, file.name)).rainNode;
+                center = new LatLng(rainNode.latitude, rainNode.longitude);
+            }
+            if (file.isFile() && file.name.indexOf('rainPolarMeasureValues') >= 0) {
+                lastDate = new Date(file.name.substring(file.name.indexOf('.snap.') + 6, file.name.indexOf('.json')));
+                const data = require(path.resolve(filesPath, file.name)).rainPolarMeasureValues.polars;
+                const rainPolarMeasureValue = new RainPolarMeasureValue(data);
+                const periodEnd = new Date(lastDate);
+                periodEnd.setMinutes(lastDate.getMinutes() + 5); // TODO 5mn debt
+                measures.push({periodBegin: lastDate, periodEnd, rainPolarMeasureValue});
+            }
+        }
 
-        const fileName = path.resolve(__dirname, './files/555555b00000000000000007-cartesianRainHistories-2023-11-07T14:04:52.791Z.gitignored.encoded.json');
-        const cartesianRainHistoriesEncoded = readFileSync(fileName);
-        // tslint:disable-next-line:max-line-length
-        // const cartesianRainHistoriesEncoded = require('./files/555555b00000000000000007-cartesianRainHistories-2023-11-07T14:04:52.791Z.gitignored.encoded.json')
-        const {cartesianRainHistories} = msgpack.decode(cartesianRainHistoriesEncoded);
+        expect(cartesianGaugeHistories).to.exist;
+        expect(center).to.exist;
+        expect(measures.length).to.greaterThan(0);
 
-        // possible period filtering
-        const dateToConsider = new Date('2018-05-25T23:51:00+02:00'); // any sample date
-        const periodBegin = new Date(dateToConsider.getTime() - 30 * 60000); // 30 mn before
-        const cartesianRainHistoriesFiltered = cartesianRainHistories
-            .filter(crh => periodBegin.getTime() <= crh.periodBegin.getTime() && crh.periodBegin.getTime() <= dateToConsider.getTime());
-        const nonNullValues = cartesianRainHistoriesFiltered.filter(crh => crh.computedValue.value);
-        console.log('Filtering period:', dateToConsider.toISOString(),
-            ', non null values:', nonNullValues.length, 'in', cartesianRainHistoriesFiltered.length);
+        // Polar => Cartesian
+        const cartesianRainHistories = [];
+        for (const measure of measures) {
+            const converter = new Converter(center, measure.rainPolarMeasureValue);
+            const cartesianMeasureValue = converter.getCartesianMeasureValue();
+            for (const cv of cartesianMeasureValue.getCartesianValues()) {
+                const cartesianRainHistory = new CartesianRainHistory(measure.periodBegin, measure.periodEnd, cv);
+                cartesianRainHistories.push(cartesianRainHistory);
+            }
+        }
 
         // Compute the quality
-        const cartesianQuality = new CartesianQuality(cartesianRainHistoriesFiltered, cartesianGaugeHistories);
-        const rainComputationQuality = await cartesianQuality.getRainComputationQuality();
+        const cartesianQuality = new CartesianQuality(cartesianRainHistories, cartesianGaugeHistories);
+        const rainComputationQuality = await cartesianQuality.getRainComputationQuality(lastDate);
 
         // Verify results
-        const matrix = rainComputationQuality.qualitySpeedMatrixContainer.getMatrix();
-        matrix.logFlatten();
+        cartesianQuality.logQualities();
 
-        // Expected => 0
+        // Expected Quality indicator => 0
         // TODO check if we are improving ?
-        expect(rainComputationQuality.qualitySpeedMatrixContainer.getQuality()).lessThanOrEqual(0.073);
-        expect(rainComputationQuality.qualitySpeedMatrixContainer.getMaxGauge()).eq(5.003);
-        expect(rainComputationQuality.qualitySpeedMatrixContainer.getMaxRain()).eq(5.011);
+        const indicator = rainComputationQuality.qualitySpeedMatrixContainer?.getQuality();
+        expect(indicator).lessThanOrEqual(0.12);
+        expect(rainComputationQuality.qualitySpeedMatrixContainer?.getMaxGauge()).eq(4.800000000000001);
+        expect(rainComputationQuality.qualitySpeedMatrixContainer?.getMaxRain()).eq(4.73758491983765);
 
-    });
-
+    })
+    // .timeout(20000);
 });

@@ -13,16 +13,18 @@
   "main": "./index.js",
   "types": "./index.d.ts",
   "dependencies": {
+    "asciichart": "^1.5.25",
     "geolib": "^3.3.3",
-    "raain-model": "file:../raain-model/dist"
+    "raain-model": "file:../raain-model/dist",
+    "termination": "^1.0.3"
   },
   "devDependencies": {
-    "@types/chai": "^4.3.4",
+    "@types/chai": "^4.3.10",
     "@types/mocha": "^10.0.1",
     "@types/node": "^20.8.8",
-    "chai": "^4.3.7",
+    "chai": "^4.3.10",
     "chai-as-promised": "^7.1.1",
-    "chai-spies": "^1.0.0",
+    "chai-spies": "^1.1.0",
     "mocha": "^10.2.0",
     "mocha-typescript": "^1.1.17",
     "msgpack-lite": "file:../../mlefree/msgpack-lite/dist",

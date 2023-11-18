@@ -32,7 +32,11 @@ export class SpeedMatrixContainer {
     }
 
     getMatrix(index = 0) {
-        return this.matrices[index];
+        return this.getMatrices()[index];
+    }
+
+    getMatrices() {
+        return this.matrices;
     }
 
     getGaugeIdRelatedValues(gaugeId: string): QualityPoint {
@@ -45,10 +49,14 @@ export class SpeedMatrixContainer {
 
         let sumGauge = 0;
         let sumRain = 0;
-        for (const matrix of this.matrices) {
-            const qualityPoint = matrix.getGaugeIdRelatedValues(gaugeId);
-            sumGauge += qualityPoint.gaugeCartesianValue.value;
-            sumRain += qualityPoint.rainCartesianValue.value;
+        for (const matrix of this.getMatrices()) {
+            try {
+                const qualityPoint = matrix.getGaugeIdRelatedValues(gaugeId);
+                sumGauge += qualityPoint.gaugeCartesianValue.value;
+                sumRain += qualityPoint.rainCartesianValue.value;
+            } catch (e) {
+                console.warn('>> raain-quality ### Impossible to retrieve some GaugeIdRelatedValues', gaugeId, e);
+            }
         }
 
         return new QualityPoint(gaugeId, null, null,
@@ -65,10 +73,10 @@ export class SpeedMatrixContainer {
         // all gauges & flattenMatrices
         let gaugeIds = [];
         const flattenMatrices = [];
-        this.matrices.forEach(matrix => {
+        for (const matrix of this.getMatrices()) {
             gaugeIds = gaugeIds.concat(matrix.getGaugeIds());
             flattenMatrices.push(matrix.renderFlatten());
-        });
+        }
         gaugeIds = uniq(gaugeIds);
 
         // find all qualityPoints
@@ -87,17 +95,25 @@ export class SpeedMatrixContainer {
     getMaxRain(): number {
         const qualityPoints = this.getQualityPoints();
         let max = -1;
-        qualityPoints.forEach(p => max = Math.max(max, p.rainCartesianValue.value));
+        for (const p of qualityPoints) {
+            max = Math.max(max, p.rainCartesianValue.value);
+        }
         return max;
     }
 
     getMaxGauge(): number {
         const qualityPoints = this.getQualityPoints();
         let max = -1;
-        qualityPoints.forEach(p => max = Math.max(max, p.gaugeCartesianValue.value));
+        for (const p of qualityPoints) {
+            max = Math.max(max, p.gaugeCartesianValue.value);
+        }
         return max;
     }
 
+    /**
+     * Get summed quality indicator (0 ideally)
+     *  @link SpeedMatrix.computeQualityIndicator
+     */
     getQuality(): number {
         const qualityPoints = this.getQualityPoints();
         return SpeedMatrix.computeQualityIndicator(qualityPoints);
@@ -109,9 +125,9 @@ export class SpeedMatrixContainer {
         }
 
         this.trustedIndicators = [];
-        this.matrices.forEach(matrix => {
+        for (const matrix of this.getMatrices()) {
             this.trustedIndicators.push(matrix.getTrustedIndicator());
-        });
+        }
 
         return this.trustedIndicators;
     }
@@ -221,7 +237,7 @@ export class SpeedMatrixContainer {
 
             const ids = new Map();
             const concatted = a1.concat(a2);
-            concatted.forEach(qualityPoint => {
+            for (const qualityPoint of concatted) {
                 let oldValue = {
                     gaugeValue: 0,
                     rainValue: 0
@@ -233,7 +249,7 @@ export class SpeedMatrixContainer {
                     gaugeValue: qualityPoint.gaugeCartesianValue.value + oldValue.gaugeValue,
                     rainValue: qualityPoint.rainCartesianValue.value + oldValue.rainValue,
                 });
-            });
+            }
 
             const arr = [...ids].map(([name, value]) => {
                 return new QualityPoint(name, null, null,

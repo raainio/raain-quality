@@ -6,13 +6,16 @@ describe('QualityTools', () => {
 
 
     it('should get roundLatLng', () => {
-        expect(QualityTools.roundLatLng(12.3456)).eq(12.35);
-        expect(QualityTools.roundLatLng(12.3456, 0.01)).eq(12.35);
-        expect(QualityTools.roundLatLng(12.3456, 0.1)).eq(12.3);
-        expect(QualityTools.roundLatLng(12.3456, 1)).eq(12);
+        expect(QualityTools.roundLatLng(12.1234)).eq(12.125);
+        expect(QualityTools.roundLatLng(12.1234, 0.005)).eq(12.125);
+        expect(QualityTools.roundLatLng(12.1234, 0.001)).eq(12.123000000000001); // => needPrecision
+        expect(QualityTools.roundLatLng(12.1234, 0.001, true)).eq(12.123);
+        expect(QualityTools.roundLatLng(12.1234, 0.01, true)).eq(12.12);
+        expect(QualityTools.roundLatLng(12.1234, 0.1, true)).eq(12.1);
+        expect(QualityTools.roundLatLng(12.1234, 1)).eq(12);
 
-        expect(QualityTools.roundLatLng(-2.8000000000000003, 0.1)).eq(-2.8);
-        expect(QualityTools.roundLatLng(-2.8000000000000003, 0.002)).eq(-2.8);
+        expect(QualityTools.roundLatLng(-2.8000000000000003, 0.1, true)).eq(-2.8);
+        expect(QualityTools.roundLatLng(-2.8000000000000003, 0.002, true)).eq(-2.8);
 
         expect(QualityTools.roundLatLng(-23.8000000000000003, 10)).eq(-20);
         expect(QualityTools.roundLatLng(345.1200000000000003, 200)).eq(400);
