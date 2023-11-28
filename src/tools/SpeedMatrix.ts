@@ -8,7 +8,7 @@ import {Converter} from './Converter';
 export class SpeedMatrix {
 
     public static DEFAULT_MATRIX_RANGE = 8;
-    public static DEFAULT_ZONE_RANGE = 2;
+    public static DEFAULT_ZONE_RANGE = 1;
     public static DEFAULT_TRUSTED_INDICATOR = 1;
     private static WEIGHT_ON = false;  // <=== TODO PLAY
     private static WEIGHT_RATIO = 0.2;  // <=== TODO PLAY
@@ -22,18 +22,18 @@ export class SpeedMatrix {
         protected center: Position,
         protected zoneRange: number = SpeedMatrix.DEFAULT_ZONE_RANGE,
         private speedComputing: SpeedComputing = null,
-        protected trustedIndicator = SpeedMatrix.DEFAULT_TRUSTED_INDICATOR,
+        protected trustedTechnicalIndicator = SpeedMatrix.DEFAULT_TRUSTED_INDICATOR,
         protected flattenPositionRange: { xMin: number, xMax: number, yMin: number, yMax: number } = {xMin: -8, xMax: 8, yMin: -8, yMax: 8}
     ) {
     }
 
-    public static createFromJson(json: any): SpeedMatrix {
+    public static CreateFromJson(json: any): SpeedMatrix {
         const created = new SpeedMatrix(
             json.periods,
             json.center,
             json.zoneRange,
             json.speedComputing,
-            json.trustedIndicator,
+            json.trustedTechnicalIndicator,
             json.flattenPositionRange);
 
         if (json.flattenPositionHistory) {
@@ -54,7 +54,7 @@ export class SpeedMatrix {
      *  0 is ideal
      *  2.56 (for example) is not ideal => can be improved :)
      */
-    public static computeQualityIndicator(points: QualityPoint[]): number {
+    public static ComputeQualityIndicator(points: QualityPoint[]): number {
         let indicator = 0;
         for (const point of points) {
             indicator += Math.abs(point.rainCartesianValue?.value - point.gaugeCartesianValue?.value);
@@ -66,6 +66,34 @@ export class SpeedMatrix {
         return indicator;
     }
 
+    protected static ComputeBestSpeed(positionValues: PositionValue[],
+                                      flattenPositionRange: { xMin: number, xMax: number, yMin: number, yMax: number },
+                                      zoneRange: number) {
+
+        let squarePosition = new Position(0, 0);
+        const zoneWidth = new Position(zoneRange * 2 + 1, zoneRange * 2 + 1);
+        const availablePositions: Position[] = [];
+        for (let x = flattenPositionRange.xMin; x <= flattenPositionRange.xMax - zoneWidth.x; x++) {
+            for (let y = flattenPositionRange.yMin; y <= flattenPositionRange.yMax - zoneWidth.y; y++) {
+                availablePositions.push(new Position(x, y));
+            }
+        }
+
+        let maxValue = 0;
+        for (const position of availablePositions) {
+
+            const pixels = positionValues
+                .filter(p => SpeedComputing.IsInStrict(p, position, zoneWidth));
+            const sumValue = pixels.reduce((prev, val) => val.value + prev, 0);
+            maxValue = Math.max(maxValue, sumValue);
+            if (maxValue === sumValue) {
+                squarePosition = new Position(position.x + zoneRange, position.y + zoneRange);
+            }
+        }
+
+        return squarePosition;
+    }
+
     renderFlatten(): PositionValue[] {
 
         const positionMatrix = this.getFlatten();
@@ -73,43 +101,39 @@ export class SpeedMatrix {
             return [];
         }
 
-        // compute flattenSpeedPosition
-        this.flattenSpeedPosition = new Position(0, 0);
+        const positionHistories: PositionValue[] = [];
         let maxValue = 0;
-        const positionHistories = [];
         for (const [iX, posX] of positionMatrix.entries()) {
             for (const [iY, value] of posX.entries()) {
                 const x = iX + this.flattenPositionRange.xMin;
                 const y = iY + this.flattenPositionRange.yMin;
-                positionHistories.push(new PositionValue(x, y, value));
                 maxValue = Math.max(maxValue, value);
-                if (maxValue === value && value > 0) {
-                    this.flattenSpeedPosition = new Position(x, y);
-                }
+                positionHistories.push(new PositionValue(x, y, value));
             }
         }
 
-        // normalize
+        // compute flattenSpeedPosition
+        this.flattenSpeedPosition = SpeedMatrix.ComputeBestSpeed(positionHistories, this.flattenPositionRange, this.zoneRange);
+
+        // if (options.square) {
+        // show a square around the flattenSpeedPosition
+        const squareWidth = this.zoneRange;
+        positionHistories.forEach(p => {
+            const inTheSquareX = this.flattenSpeedPosition.x - squareWidth <= p.x
+                && p.x <= this.flattenSpeedPosition.x + squareWidth;
+            const inTheSquareY = this.flattenSpeedPosition.y - squareWidth <= p.y
+                && p.y <= this.flattenSpeedPosition.y + squareWidth;
+            if (inTheSquareX && inTheSquareY) {
+                p.value = maxValue;
+            }
+        });
+        // }
+
         if (maxValue) {
             positionHistories.forEach(p => {
                 p.value = p.value / maxValue;
             });
         }
-
-
-        // if (options.square) {
-        //     // show a square around the flattenSpeedPosition
-        //     const squareWidth = 1;
-        //     for (const p of positionHistories) {
-        //         const inTheSquareX = this.flattenSpeedPosition.x - squareWidth <= p.x
-        //         && p.x <= this.flattenSpeedPosition.x + squareWidth;
-        //         const inTheSquareY = this.flattenSpeedPosition.y - squareWidth <= p.y
-        //         && p.y <= this.flattenSpeedPosition.y + squareWidth;
-        //         if (inTheSquareX && inTheSquareY) {
-        //             p.value = maxValue;
-        //         }
-        //     }
-        // }
 
         return positionHistories;
     }
@@ -229,12 +253,12 @@ export class SpeedMatrix {
         return max;
     }
 
-    getTrustedIndicator(): number {
-        return this.trustedIndicator;
+    getTrustedTechnicalIndicator(): number {
+        return this.trustedTechnicalIndicator;
     }
 
     isConsistent(): boolean {
-        return this.trustedIndicator > SpeedMatrix.DEFAULT_TRUSTED_INDICATOR / 2;
+        return this.trustedTechnicalIndicator > SpeedMatrix.DEFAULT_TRUSTED_INDICATOR / 2;
     }
 
     toJSON(options?: { removePeriods: boolean }) {
@@ -246,7 +270,7 @@ export class SpeedMatrix {
             zoneRange: this.zoneRange,
             periods: this.periods,
             center: this.center,
-            trustedIndicator: this.trustedIndicator,
+            trustedTechnicalIndicator: this.trustedTechnicalIndicator,
         };
 
         if (options?.removePeriods) {
@@ -290,7 +314,7 @@ export class SpeedMatrix {
                 }
                 return ' ';
             }
-            return Math.round(v * 100) / 100;
+            return Math.round(v * 1000) / 1000;
         }
 
         const matrixToRender = {};
@@ -304,7 +328,7 @@ export class SpeedMatrix {
         for (let x = this.flattenPositionRange.xMin; x <= this.flattenPositionRange.xMax; x++) {
             for (let y = this.flattenPositionRange.yMin; y <= this.flattenPositionRange.yMax; y++) {
                 const value = flatten.filter(p => p.x === x && p.y === y)[0];
-                const yOfMatrix = y - this.flattenPositionRange.yMin; // this.flattenPositionRange.yMax - y;
+                const yOfMatrix = y - this.flattenPositionRange.yMin;
                 const xOfMatrix = x - this.flattenPositionRange.xMin;
                 matrixToRender[labelY(yOfMatrix)][labelX(xOfMatrix)] = valueDisplay(value.value);
             }
@@ -335,7 +359,7 @@ export class SpeedMatrix {
 
         this.flattenPositionHistory = [];
         for (let y = 0; y <= this.flattenPositionRange.yMax - this.flattenPositionRange.yMin; y++) {
-            this.flattenPositionHistory.push(Array(this.flattenPositionRange.xMax - this.flattenPositionRange.xMin + 1).fill(0));
+            this.flattenPositionHistory.push(new Array(this.flattenPositionRange.xMax - this.flattenPositionRange.xMin + 1).fill(0));
         }
 
         // same position => add value

@@ -6,7 +6,7 @@ describe('QualityTools', () => {
 
 
     it('should get roundLatLng', () => {
-        expect(QualityTools.roundLatLng(12.1234)).eq(12.125);
+        expect(QualityTools.roundLatLng(12.1234)).eq(12.120000000000001);
         expect(QualityTools.roundLatLng(12.1234, 0.005)).eq(12.125);
         expect(QualityTools.roundLatLng(12.1234, 0.001)).eq(12.123000000000001); // => needPrecision
         expect(QualityTools.roundLatLng(12.1234, 0.001, true)).eq(12.123);

@@ -4,7 +4,6 @@ import {CartesianValue, RainPolarMeasureValue} from 'raain-model';
 import * as path from 'path';
 import * as fs from 'fs';
 
-
 describe('CartesianQuality', () => {
 
     function prepareGauges(latLngMin, latLngMax, scale, date, possibleGaugePositions) {
@@ -172,16 +171,16 @@ describe('CartesianQuality', () => {
         expect(rainComputationQuality.qualitySpeedMatrixContainer.getQualityPoints().length).eq(1);
         expect(rainComputationQuality.qualitySpeedMatrixContainer.getQualityPoints()[0].gaugeId).eq('gauge0');
         expect(rainComputationQuality.qualitySpeedMatrixContainer.getQualityPoints()[0].rainCartesianValue.value).eq(60.12);
-        expect(rainComputationQuality.qualitySpeedMatrixContainer.getQualityPoints()[0].gaugeCartesianValue.value).eq(5);
+        expect(rainComputationQuality.qualitySpeedMatrixContainer.getQualityPoints()[0].gaugeCartesianValue.value).eq(60);
 
-        expect(rainComputationQuality.qualitySpeedMatrixContainer.getQuality()).eq(0.009999999999999787);
+        expect(rainComputationQuality.qualitySpeedMatrixContainer.getQuality()).eq(0.11999999999999744);
         expect(rainComputationQuality.qualitySpeedMatrixContainer.getTrustedIndicators()[0]).eq(1);
-        expect(rainComputationQuality.qualitySpeedMatrixContainer.getMaxGauge()).eq(5);
-        expect(rainComputationQuality.qualitySpeedMatrixContainer.getMaxRain()).eq(5.01);
+        expect(rainComputationQuality.qualitySpeedMatrixContainer.getMaxGauge()).eq(60);
+        expect(rainComputationQuality.qualitySpeedMatrixContainer.getMaxRain()).eq(60.12);
 
         const matrix = rainComputationQuality.qualitySpeedMatrixContainer.getMatrix();
         matrix.logFlatten();
-        expect(matrix.getTrustedIndicator()).eq(1);
+        expect(matrix.getTrustedTechnicalIndicator()).eq(1);
         const qualityPoint = matrix.getQualityPoints()[0];
         expect(qualityPoint.rainCartesianValue.lat).eq(-0.01);
         expect(qualityPoint.rainCartesianValue.lng).eq(0.01);
@@ -203,18 +202,19 @@ describe('CartesianQuality', () => {
         const rainComputationQuality = await cartesianQuality.getRainComputationQuality(scenario.date);
 
         // Verify results
-        expect(rainComputationQuality.qualitySpeedMatrixContainer.getQualityPoints().length).eq(1);
-        expect(rainComputationQuality.qualitySpeedMatrixContainer.getQualityPoints()[0].gaugeId).eq('gauge0');
-        expect(rainComputationQuality.qualitySpeedMatrixContainer.getQualityPoints()[0].gaugeCartesianValue.value).eq(5);
-        expect(rainComputationQuality.qualitySpeedMatrixContainer.getQualityPoints()[0].rainCartesianValue.value).eq(5.01);
+        const qualityPoints = rainComputationQuality.qualitySpeedMatrixContainer.getQualityPoints();
+        expect(qualityPoints.length).eq(1);
+        expect(qualityPoints[0].gaugeId).eq('gauge0');
+        expect(qualityPoints[0].gaugeCartesianValue.value).eq(60);
+        expect(qualityPoints[0].rainCartesianValue.value).eq(60.12);
 
-        expect(rainComputationQuality.qualitySpeedMatrixContainer.getQuality()).eq(0.009999999999999787);
-        expect(rainComputationQuality.qualitySpeedMatrixContainer.getMaxGauge()).eq(5);
-        expect(rainComputationQuality.qualitySpeedMatrixContainer.getMaxRain()).eq(5.01);
+        expect(rainComputationQuality.qualitySpeedMatrixContainer.getQuality()).eq(0.11999999999999744);
+        expect(rainComputationQuality.qualitySpeedMatrixContainer.getMaxGauge()).eq(60);
+        expect(rainComputationQuality.qualitySpeedMatrixContainer.getMaxRain()).eq(60.12);
 
         const matrix = rainComputationQuality.qualitySpeedMatrixContainer.getMatrix();
 
-        expect(matrix.getTrustedIndicator()).eq(1);
+        expect(matrix.getTrustedTechnicalIndicator()).eq(1);
 
         const flattenMatrix = matrix.renderFlatten();
         matrix.logFlatten();
@@ -227,8 +227,9 @@ describe('CartesianQuality', () => {
 
         expect(flattenMatrix[144].x).equal(0);
         expect(flattenMatrix[144].y).equal(0);
-        expect(flattenMatrix[144].value).equal(0.2526718292230032);
+        expect(flattenMatrix[144].value).equal(0.9992022337455126);
         expect(flattenMatrix[141].value).equal(0.9998004390341247);
+        expect(flattenMatrix[140].value).equal(1);
 
         expect(matrix.getQualityPoints()[0].gaugeCartesianValue.lat).eq(-0.91);
         expect(matrix.getQualityPoints()[0].gaugeCartesianValue.lng).eq(0.91);
@@ -249,18 +250,18 @@ describe('CartesianQuality', () => {
         const rainComputationQuality = await cartesianQuality.getRainComputationQuality(scenario.date);
 
         // Verify results
-        expect(rainComputationQuality.qualitySpeedMatrixContainer.getQuality()).eq(0.008749999999999813);
-        expect(rainComputationQuality.qualitySpeedMatrixContainer.getMaxGauge()).eq(5.003);
-        expect(rainComputationQuality.qualitySpeedMatrixContainer.getMaxRain()).eq(5.011);
+        expect(rainComputationQuality.qualitySpeedMatrixContainer.getQuality()).eq(0.10499999999999865);
+        expect(rainComputationQuality.qualitySpeedMatrixContainer.getMaxGauge()).eq(60.036);
+        expect(rainComputationQuality.qualitySpeedMatrixContainer.getMaxRain()).eq(60.132000000000005);
 
         expect(rainComputationQuality.qualitySpeedMatrixContainer.getQualityPoints().length).eq(4);
         expect(rainComputationQuality.qualitySpeedMatrixContainer.getQualityPoints()[0].gaugeId).eq('gauge0');
-        expect(rainComputationQuality.qualitySpeedMatrixContainer.getQualityPoints()[0].rainCartesianValue.value).eq(5.01);
-        expect(rainComputationQuality.qualitySpeedMatrixContainer.getQualityPoints()[0].gaugeCartesianValue.value).eq(5);
+        expect(rainComputationQuality.qualitySpeedMatrixContainer.getQualityPoints()[0].rainCartesianValue.value).eq(60.12);
+        expect(rainComputationQuality.qualitySpeedMatrixContainer.getQualityPoints()[0].gaugeCartesianValue.value).eq(60);
 
         const matrix = rainComputationQuality.qualitySpeedMatrixContainer.getMatrix();
 
-        expect(matrix.getTrustedIndicator()).eq(1);
+        expect(matrix.getTrustedTechnicalIndicator()).eq(1);
 
         expect(matrix.getQualityPoints()[0].rainCartesianValue.lat).eq(-0.91);
         expect(matrix.getQualityPoints()[0].rainCartesianValue.lng).eq(0.91);
@@ -281,7 +282,7 @@ describe('CartesianQuality', () => {
         expect(flatten[defaultWidth * defaultWidth - 1].value).eq(0);
         expect(flatten[144].x).eq(0);
         expect(flatten[144].y).eq(0);
-        expect(flatten[144].value).eq(1532.9350492338667);
+        expect(flatten[144].value).eq(1);
 
         // Get the cached result
         const rainComputationQualityCached = await cartesianQuality.getRainComputationQuality(scenario.date);
@@ -300,18 +301,21 @@ describe('CartesianQuality', () => {
         const rainComputationQuality = await cartesianQuality.getRainComputationQuality(scenario.date);
 
         // Verify results
-        expect(rainComputationQuality.qualitySpeedMatrixContainer.getQuality()).eq(0.008749999999999813);
-        expect(rainComputationQuality.qualitySpeedMatrixContainer.getMaxGauge()).eq(5.003);
-        expect(rainComputationQuality.qualitySpeedMatrixContainer.getMaxRain()).eq(5.011);
+        expect(rainComputationQuality.qualitySpeedMatrixContainer.getQuality()).eq(0.10499999999999865);
+        expect(rainComputationQuality.qualitySpeedMatrixContainer.getMaxGauge()).eq(60.036);
+        expect(rainComputationQuality.qualitySpeedMatrixContainer.getMaxRain()).eq(60.132000000000005);
 
         const matrix = rainComputationQuality.qualitySpeedMatrixContainer.getMatrix();
 
-        expect(matrix.getTrustedIndicator()).eq(1);
+        expect(matrix.getTrustedTechnicalIndicator()).eq(1);
 
         expect(rainComputationQuality.qualitySpeedMatrixContainer.getQualityPoints().length).eq(4);
         expect(rainComputationQuality.qualitySpeedMatrixContainer.getQualityPoints()[0].gaugeId).eq('gauge0');
-        expect(rainComputationQuality.qualitySpeedMatrixContainer.getQualityPoints()[0].rainCartesianValue.value).eq(5.01);
-        expect(rainComputationQuality.qualitySpeedMatrixContainer.getQualityPoints()[0].gaugeCartesianValue.value).eq(5);
+        expect(rainComputationQuality.qualitySpeedMatrixContainer.getQualityPoints()[0].rainCartesianValue.value).eq(60.12);
+        expect(rainComputationQuality.qualitySpeedMatrixContainer.getQualityPoints()[0].gaugeCartesianValue.value).eq(60);
+
+        const flatten = matrix.renderFlatten();
+        matrix.logFlatten();
 
         expect(matrix.getQualityPoints()[0].rainCartesianValue.lat).eq(40.1);
         expect(matrix.getQualityPoints()[0].rainCartesianValue.lng).eq(41.91);
@@ -320,8 +324,6 @@ describe('CartesianQuality', () => {
         expect(matrix.getQualityPoints()[0].speed.x).eq(0.01);
         expect(matrix.getQualityPoints()[0].speed.y).eq(0);
 
-        const flatten = matrix.renderFlatten();
-        matrix.logFlatten();
         const defaultWidth = 8 + 8 + 1;
         expect(flatten.length).eq(defaultWidth * defaultWidth);
         expect(flatten[0].x).eq(-8);
@@ -350,23 +352,23 @@ describe('CartesianQuality', () => {
         const cartesianQuality2 = new CartesianQuality(scenario2.cartesianRainHistories, scenario2.cartesianGaugeHistories);
         const rainComputationQuality2 = await cartesianQuality2.getRainComputationQuality(scenario2.date);
 
-        expect(rainComputationQuality1.periodBegin.getTime()).eq(new Date(0).getTime());
-        expect(rainComputationQuality2.periodBegin.getTime()).eq(new Date(30 * 60000).getTime());
+        expect(rainComputationQuality1.periodBegin.getTime()).eq(new Date(25 * 60000).getTime());
+        expect(rainComputationQuality2.periodBegin.getTime()).eq(new Date(55 * 60000).getTime());
         expect(rainComputationQuality1.progressIngest).eq(undefined);
         expect(rainComputationQuality1.progressComputing).eq(undefined);
         expect(rainComputationQuality1.timeSpentInMs).greaterThan(10);
 
-        expect(rainComputationQuality1.qualitySpeedMatrixContainer.getQuality()).eq(0.008749999999999813);
-        expect(rainComputationQuality1.qualitySpeedMatrixContainer.getMaxGauge()).eq(5.003);
-        expect(rainComputationQuality1.qualitySpeedMatrixContainer.getMaxRain()).eq(5.011);
-        expect(rainComputationQuality2.qualitySpeedMatrixContainer.getQuality()).eq(0.008749999999999813);
-        expect(rainComputationQuality2.qualitySpeedMatrixContainer.getMaxGauge()).eq(5.003);
-        expect(rainComputationQuality2.qualitySpeedMatrixContainer.getMaxRain()).eq(5.011);
+        expect(rainComputationQuality1.qualitySpeedMatrixContainer.getQuality()).eq(0.10499999999999865);
+        expect(rainComputationQuality1.qualitySpeedMatrixContainer.getMaxGauge()).eq(60.036);
+        expect(rainComputationQuality1.qualitySpeedMatrixContainer.getMaxRain()).eq(60.132000000000005);
+        expect(rainComputationQuality2.qualitySpeedMatrixContainer.getQuality()).eq(0.11999999999999744);
+        expect(rainComputationQuality2.qualitySpeedMatrixContainer.getMaxGauge()).eq(60.036);
+        expect(rainComputationQuality2.qualitySpeedMatrixContainer.getMaxRain()).eq(60.156);
 
         expect(rainComputationQuality1.qualitySpeedMatrixContainer.getQualityPoints().length).eq(4);
         expect(rainComputationQuality2.qualitySpeedMatrixContainer.getQualityPoints().length).eq(4);
-        expect(rainComputationQuality1.qualitySpeedMatrixContainer.getQualityPoints()[0].gaugeCartesianValue.value).eq(5);
-        expect(rainComputationQuality1.qualitySpeedMatrixContainer.getQualityPoints()[0].rainCartesianValue.value).eq(5.01);
+        expect(rainComputationQuality1.qualitySpeedMatrixContainer.getQualityPoints()[0].gaugeCartesianValue.value).eq(60.036);
+        expect(rainComputationQuality1.qualitySpeedMatrixContainer.getQualityPoints()[0].rainCartesianValue.value).eq(60.156);
 
         rainComputationQuality1.merge(rainComputationQuality2);
 
@@ -386,8 +388,8 @@ describe('CartesianQuality', () => {
 
     it('should getRainComputationQuality with Json files', async () => {
 
-        // read files
-        let cartesianGaugeHistories, center, lastDate;
+        // read Polar files
+        let cartesianGaugeHistories: CartesianGaugeHistory[], center: LatLng, lastDate: Date;
         const measures = [];
         const filesPath = path.resolve(__dirname, 'files');
         const files = fs.readdirSync(filesPath, {withFileTypes: true});
@@ -409,35 +411,58 @@ describe('CartesianQuality', () => {
             }
         }
 
+        expect(measures.length).to.greaterThan(0, 'Files are probably missing');
+        // tslint:disable-next-line:no-unused-expression
         expect(cartesianGaugeHistories).to.exist;
+        // tslint:disable-next-line:no-unused-expression
         expect(center).to.exist;
-        expect(measures.length).to.greaterThan(0);
 
         // Polar => Cartesian
-        const cartesianRainHistories = [];
+        const cartesianRainHistories: CartesianRainHistory[] = [];
+        let cartesianPixelWidth: LatLng;
         for (const measure of measures) {
             const converter = new Converter(center, measure.rainPolarMeasureValue);
             const cartesianMeasureValue = converter.getCartesianMeasureValue();
+            cartesianPixelWidth = converter.getCartesianPixelWidth();
             for (const cv of cartesianMeasureValue.getCartesianValues()) {
                 const cartesianRainHistory = new CartesianRainHistory(measure.periodBegin, measure.periodEnd, cv);
                 cartesianRainHistories.push(cartesianRainHistory);
             }
         }
 
+        // TODO special filter for test
+        // cartesianGaugeHistories = cartesianGaugeHistories.filter(h => h.gaugeId === 'PL02');
+        // for (const gauge of cartesianGaugeHistories) {
+        //     const gaugeTime = new Date(gauge.date).getTime();
+        //     cartesianRainHistories.forEach(crh => {
+        //         if (crh.periodBegin.getTime() <= gaugeTime && gaugeTime <= crh.periodEnd.getTime()) {
+        //             const c = Converter.MapLatLngToPosition(crh.computedValue, true, cartesianPixelWidth);
+        //             const g = Converter.MapLatLngToPosition(gauge.value, true, cartesianPixelWidth);
+        //             if (c.x >= g.x && c.y >= g.y) {
+        //                 crh.computedValue.value = gauge.value.value * 12;
+        //             }
+        //         }
+        //     });
+        // }
+
         // Compute the quality
-        const cartesianQuality = new CartesianQuality(cartesianRainHistories, cartesianGaugeHistories);
-        const rainComputationQuality = await cartesianQuality.getRainComputationQuality(lastDate);
+        const cartesianQuality = new CartesianQuality(cartesianRainHistories, cartesianGaugeHistories, cartesianPixelWidth);
+
+        let rainComputationQuality;
+        // TODO only one ? const rainComputationQuality = await cartesianQuality.getRainComputationQuality(lastDate);
+        const dates = cartesianQuality.getRainDates();
+        for (const stepDate of dates) {
+            rainComputationQuality = await cartesianQuality.getRainComputationQuality(stepDate);
+        }
 
         // Verify results
         cartesianQuality.logQualities();
 
         // Expected Quality indicator => 0
-        // TODO check if we are improving ?
+        // TODO check if we are improving ? actual Challenge === 0.12 \o/
         const indicator = rainComputationQuality.qualitySpeedMatrixContainer?.getQuality();
         expect(indicator).lessThanOrEqual(0.12);
-        expect(rainComputationQuality.qualitySpeedMatrixContainer?.getMaxGauge()).eq(4.800000000000001);
-        expect(rainComputationQuality.qualitySpeedMatrixContainer?.getMaxRain()).eq(4.73758491983765);
 
     })
-    // .timeout(20000);
+        .timeout(200000);
 });

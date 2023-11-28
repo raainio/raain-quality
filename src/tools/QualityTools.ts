@@ -89,42 +89,44 @@ export class QualityTools {
         return isOut;
     }
 
-    public static logCartesianValues(center: LatLng, cartesianValues: CartesianValue[], scale = CartesianQuality.DEFAULT_SCALE) {
+    public static logCartesianValues(cartesianValues: CartesianValue[]) {
+        console.log('>> raain-quality ### logCartesianValues with', cartesianValues.length,
+            CartesianQuality.DEFAULT_SCALE, Converter.POLAR_PRECISION, ' in progress...');
         const pointsToShow = {};
+        const latSteps = Converter.ComputeLatSteps(cartesianValues);
+        const lngSteps = Converter.ComputeLngSteps(cartesianValues);
+        console.log('>> raain-quality ### logCartesianValues latSteps:', latSteps, 'lngSteps:', lngSteps);
 
-        const latLngStep = Converter.ComputeLatLngStep(cartesianValues);
-        const latLngRange = Converter.ComputeLatLngRange(cartesianValues);
-
-
-        const labelWithSign = (val) => {
-            const value = QualityTools.roundLatLng(val, scale, true);
-            if (value < 0) {
-                return '' + value;
-            } else if (value === 0) {
-                return ' ' + 0;
-            }
-            return '+' + value;
+        const labelX = (v: number) => {
+            return Converter.LabelWithSign(v)
         }
-        const labelX = (x) => {
-            return labelWithSign(x);
-        };
-        const labelY = (y) => {
-            return labelWithSign(y);
-        };
+        const labelY = (v: number) => {
+            return Converter.LabelWithSign(v)
+        }
         const valueDisplay = (v) => {
-            return Math.round(v * 100) / 100;
+            return '' + Math.round(v * 100) / 100;
         }
 
-        for (let lat = center.lat - (latLngRange.lat / 2); lat < center.lat + (latLngRange.lat / 2); lat += latLngStep.lat) {
+        for (let lat of latSteps) {
             const xObject = {};
-            for (let lng = center.lng - (latLngRange.lng / 2); lng < center.lng + (latLngRange.lng / 2); lng += latLngStep.lng) {
+            for (let lng of lngSteps) {
+
+                const latLng = new LatLng(lat, lng);
+                latLng.setPrecision(12);
+                lat = latLng.lat;
+                lng = latLng.lng;
                 xObject[labelX(lng)] = valueDisplay(0);
             }
             pointsToShow[labelY(lat)] = xObject;
         }
 
         for (const [index, point] of cartesianValues.entries()) {
-            pointsToShow[labelX(point.lat)][labelY(point.lng)] = valueDisplay(point.value);
+            let value = valueDisplay(point.value)
+            if (pointsToShow[labelY(point.lat)][labelX(point.lng)] !== '0') {
+                value = '' + value + '?' + pointsToShow[labelY(point.lat)][labelX(point.lng)];
+            }
+
+            pointsToShow[labelY(point.lat)][labelX(point.lng)] = value;
         }
 
         console.table(pointsToShow);

@@ -17,7 +17,7 @@ export class SpeedMatrixContainer {
         this.flattenMatrices = [];
     }
 
-    public static createFromJson(json): SpeedMatrixContainer {
+    public static CreateFromJson(json): SpeedMatrixContainer {
         const created = new SpeedMatrixContainer([]);
         if (json.qualityPoints) {
             created.qualityPoints = json.qualityPoints;
@@ -112,11 +112,11 @@ export class SpeedMatrixContainer {
 
     /**
      * Get summed quality indicator (0 ideally)
-     *  @link SpeedMatrix.computeQualityIndicator
+     *  @link SpeedMatrix.ComputeQualityIndicator
      */
     getQuality(): number {
         const qualityPoints = this.getQualityPoints();
-        return SpeedMatrix.computeQualityIndicator(qualityPoints);
+        return SpeedMatrix.ComputeQualityIndicator(qualityPoints);
     }
 
     getTrustedIndicators(): number[] {
@@ -126,7 +126,7 @@ export class SpeedMatrixContainer {
 
         this.trustedIndicators = [];
         for (const matrix of this.getMatrices()) {
-            this.trustedIndicators.push(matrix.getTrustedIndicator());
+            this.trustedIndicators.push(matrix.getTrustedTechnicalIndicator());
         }
 
         return this.trustedIndicators;

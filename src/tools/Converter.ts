@@ -7,12 +7,19 @@ import {Position} from './Position';
 
 export class Converter {
 
-    protected static TO_CARTESIAN_RATE = 0.3; // [0 - 1]
-    protected static POLAR_PRECISION = 10; // [1 - 10]
-    protected static CARTESIAN_WIDTH = 250;
+    public static POLAR_PRECISION = 10; // [1 - 10]
+    protected static CARTESIAN_GROUP_BY = 1;
+    protected static CARTESIAN_WIDTH_IN_KM = 250;
+
+    /**
+     * value of [0 - 1]
+     * @deprecated
+     */
+    protected static TO_CARTESIAN_RATE = 0.3;
 
     protected azimuthDelta: number;
-    protected width: LatLng;
+    protected cartesianPixelWidth: LatLng;
+    protected lastCartesianMeasureValueComputed: ICartesianMeasureValue;
 
     constructor(protected center: LatLng,
                 protected polarMeasureValue: IPolarMeasureValue) {
@@ -26,7 +33,7 @@ export class Converter {
             // console.warn('this.azimuthDelta looks not consistent : data issue ?', this.azimuthDelta);
         }
 
-        this.setWidth(CartesianQuality.DEFAULT_SCALE, CartesianQuality.DEFAULT_SCALE);
+        this.setCartesianPixelWidth(CartesianQuality.DEFAULT_SCALE, CartesianQuality.DEFAULT_SCALE);
     }
 
     public static GetLatLngFromPolar(center: LatLng,
@@ -42,12 +49,13 @@ export class Converter {
 
     public static GetXYFromPolar(polarAzimuthInDegrees: number,
                                  polarDistanceInMeters: number,
-                                 xyInMeters: number): { x: number, y: number } {
+                                 xyInMeters: number,
+                                 groupWidth = 1): { x: number, y: number } {
 
-        const az = Converter.degToRad(-polarAzimuthInDegrees + 90);
+        const az = Converter.DegToRad(-polarAzimuthInDegrees + 90);
 
-        let x = polarDistanceInMeters / xyInMeters * Math.cos(az);
-        let y = polarDistanceInMeters / xyInMeters * Math.sin(az);
+        let x = (polarDistanceInMeters / xyInMeters * Math.cos(az)) / groupWidth;
+        let y = (polarDistanceInMeters / xyInMeters * Math.sin(az)) / groupWidth;
 
         x = Math.round(x);
         y = Math.round(y);
@@ -55,17 +63,35 @@ export class Converter {
         return {x, y};
     }
 
-    public static ComputeLatLngRange(cartesianValues: CartesianValue[]): LatLng {
+    public static ComputeLatLngRange(cartesianValues: CartesianValue[]): { start: LatLng, end: LatLng } {
 
-        let lat = CartesianQuality.DEFAULT_SCALE;
-        let lng = CartesianQuality.DEFAULT_SCALE;
-        if (cartesianValues.length > 1) {
-            const lngValues = cartesianValues.sort((a, b) => a.lat - b.lat);
-            lng = QualityTools.roundLatLng((lngValues[lngValues.length - 1].lng - lngValues[0].lng), CartesianQuality.DEFAULT_SCALE, true);
-            const latValues = cartesianValues.sort((a, b) => a.lng - b.lng);
-            lat = QualityTools.roundLatLng((latValues[latValues.length - 1].lat - latValues[0].lat), CartesianQuality.DEFAULT_SCALE, true);
+        if (cartesianValues.length <= 1) {
+            throw new Error('Impossible to compute empty values');
         }
-        return new LatLng(lat, lng);
+
+        const lngValues = cartesianValues.sort((a, b) => a.lat - b.lat);
+        const lng1 = lngValues[0].lng;
+        const lng2 = lngValues[lngValues.length - 1].lng;
+
+        const latValues = cartesianValues.sort((a, b) => a.lng - b.lng);
+        const lat1 = latValues[0].lat;
+        const lat2 = latValues[latValues.length - 1].lat;
+
+        const start = new LatLng(lat1, lng1);
+        const end = new LatLng(lat2, lng2);
+        start.setPrecision(12);
+        end.setPrecision(12);
+        return {start, end};
+    }
+
+    public static ComputeLatSteps(cartesianValues: CartesianValue[]): number[] {
+        const lats = cartesianValues.map(c => c.lat).sort((a, b) => a - b);
+        return Converter.UniqNum(lats);
+    }
+
+    public static ComputeLngSteps(cartesianValues: CartesianValue[]): number[] {
+        const lngs = cartesianValues.map(c => c.lng).sort((a, b) => a - b);
+        return Converter.UniqNum(lngs);
     }
 
     public static ComputeLatLngStep(cartesianValues: CartesianValue[]): LatLng {
@@ -74,16 +100,18 @@ export class Converter {
         let lng = CartesianQuality.DEFAULT_SCALE;
         if (cartesianValues.length > 1) {
             const lngValues = cartesianValues.sort((a, b) => a.lat - b.lat);
-            lng = QualityTools.roundLatLng((lngValues[1].lng - lngValues[0].lng), CartesianQuality.DEFAULT_SCALE, true);
+            lng = lngValues[1].lng - lngValues[0].lng;
             const latValues = cartesianValues.sort((a, b) => a.lng - b.lng);
-            lat = QualityTools.roundLatLng((latValues[1].lat - latValues[0].lat), CartesianQuality.DEFAULT_SCALE, true);
+            lat = latValues[1].lat - latValues[0].lat;
         }
-        return new LatLng(lat, lng);
+        const latLng = new LatLng(lat, lng);
+        latLng.setPrecision(12);
+        return latLng;
     }
 
     public static GetLatLngFromDistances(center: LatLng, xMeters: number, yMeters: number): LatLng {
 
-        const polarAzimuthInDegrees = Converter.radToDeg(Math.atan2(xMeters, yMeters));
+        const polarAzimuthInDegrees = Converter.RadToDeg(Math.atan2(xMeters, yMeters));
         const polarDistanceInMeters = Math.sqrt(xMeters * xMeters + yMeters * yMeters);
 
         const dest = computeDestinationPoint(
@@ -94,7 +122,7 @@ export class Converter {
         return new LatLng(dest.latitude, dest.longitude);
     }
 
-    public static CartesianSquare(point: LatLng, width: { lat: number, lng: number }): {
+    public static ComputeCartesianSquare(point: LatLng, width: { lat: number, lng: number }): {
         p1: LatLng,
         p2: LatLng,
         p3: LatLng,
@@ -124,12 +152,14 @@ export class Converter {
         return {p1, p2, p3, p4};
     }
 
-    public static MapLatLngToPosition(latLng: LatLng | CartesianValue, rounded = false): Position {
+    public static MapLatLngToPosition(latLng: LatLng | CartesianValue, rounded = false,
+                                      cartesianPixelWidth: LatLng =
+                                          new LatLng(CartesianQuality.DEFAULT_SCALE, CartesianQuality.DEFAULT_SCALE,)): Position {
         let x = latLng.lng;
         let y = latLng.lat;
         if (rounded) {
-            x = QualityTools.roundLatLng(x, CartesianQuality.DEFAULT_SCALE, true);
-            y = QualityTools.roundLatLng(y, CartesianQuality.DEFAULT_SCALE, true);
+            x = QualityTools.roundLatLng(x, cartesianPixelWidth.lng, true);
+            y = QualityTools.roundLatLng(y, cartesianPixelWidth.lat, true);
         }
 
         return new Position(x, y);
@@ -141,7 +171,48 @@ export class Converter {
         return new LatLng(lat, lng);
     }
 
-    private static radToDeg(azimuthInRad: number) {
+    public static GetValueOfGroup(subs: number[], groupWidth: number, xInTheGroup: number, yInTheGroup: number) {
+        if (groupWidth <= 0) {
+            return 0;
+        }
+
+        const groupPos = xInTheGroup + yInTheGroup * groupWidth;
+        const nbValuesByGroup = subs.length / (groupWidth * groupWidth);
+        const sortedSubs = subs.sort((a, b) => a - b);
+        return sortedSubs.reduce((p, v, i) => {
+            const inTheSubGroup = Math.floor(i / nbValuesByGroup);
+            if (inTheSubGroup === groupPos) {
+                return v + p;
+            }
+            return p;
+        }, 0) / nbValuesByGroup;
+    }
+
+    public static LabelWithSign(val: number) {
+        const value = val;
+        if (value < 0) {
+            return '' + value;
+        } else if (value === 0) {
+            return ' ' + 0;
+        }
+        return '+' + value;
+    }
+
+    private static LabelX(key: string) {
+        const value = parseInt(key.substring(1, key.indexOf('y')), 10);
+        return Converter.LabelWithSign(value);
+    }
+
+    private static LabelY(key: string) {
+        const value = parseInt(key.substring(key.indexOf('y') + 1), 10);
+        return Converter.LabelWithSign(value);
+    }
+
+    private static ValueDisplay(v: number): number {
+        return v;
+    }
+
+    private static RadToDeg(azimuthInRad: number) {
         let azimuthInDegrees = azimuthInRad * 180 / Math.PI; // rads to degs, range (-180, 180]
         if (azimuthInDegrees < 0) {
             azimuthInDegrees = 360 + azimuthInDegrees;
@@ -151,41 +222,186 @@ export class Converter {
         return azimuthInDegrees;
     }
 
-    private static degToRad(azimuthInDegrees: number) {
+    private static DegToRad(azimuthInDegrees: number) {
         return azimuthInDegrees * Math.PI / 180;
     }
 
+    private static LogSubValues(subCartesianValues: {}, maxX: number, maxY: number) {
+        console.log('>> raain-quality ### LogSubValues with',
+            CartesianQuality.DEFAULT_SCALE, Converter.POLAR_PRECISION, ' in progress...');
+        const pointsToShow = {};
+        const keys = Object.keys(subCartesianValues);
+        const width = Math.max(maxX, maxY); // Math.round((Math.sqrt(keys.length) - 2) / 2);
+        for (let y = -width; y <= width; y++) {
+            const xObject = {};
+            for (let x = -width; x <= width; x++) {
+                xObject[Converter.LabelX('x' + x + 'y')] = Converter.ValueDisplay(0);
+            }
+            pointsToShow[Converter.LabelY('xy' + y)] = xObject;
+        }
 
-    public setWidth(lat: number, lng: number) {
-        lat = Math.round(lat * 100000) / 100000;
-        lng = Math.round(lng * 100000) / 100000;
-        this.width = new LatLng(lat, lng);
+        for (const [index, key] of keys.entries()) {
+            const value = Math.round(subCartesianValues[key].value / subCartesianValues[key].count);
+            pointsToShow[Converter.LabelY(key)][Converter.LabelX(key)] = value;
+        }
+
+        console.table(pointsToShow);
+    }
+
+    private static LogSubValuesGrouped(center: LatLng, subCartesianValues: {}, maxX: number, maxY: number) {
+        console.log('>> raain-quality ### LogSubValuesGrouped with',
+            center, CartesianQuality.DEFAULT_SCALE, Converter.POLAR_PRECISION, ' in progress...');
+        const pointsToShow = {};
+        const keys = Object.keys(subCartesianValues);
+        const width = Math.max(maxX, maxY); // Math.round((Math.sqrt(keys.length) - 2) / 2);
+        for (let y = -width; y <= width; y++) {
+            const xObject = {};
+            for (let x = -width; x <= width; x++) {
+                xObject[Converter.LabelX('x' + x + 'y')] = Converter.ValueDisplay(0);
+            }
+            pointsToShow[Converter.LabelY('xy' + y)] = xObject;
+        }
+
+        for (const [index, key] of keys.entries()) {
+            const sum = subCartesianValues[key].reduce((p, v) => p + v, 0);
+            const value = Math.round(sum / subCartesianValues[key].length);
+            pointsToShow[Converter.LabelY(key)][Converter.LabelX(key)] = value;
+        }
+
+        console.table(pointsToShow);
+    }
+
+    private static UniqNum(a: number[]) {
+        return [...new Set(a)];
+    }
+
+    private static UniqStr(a: number[]) {
+        return [...new Set(a)];
+    }
+
+    public getCartesianPixelWidth() {
+        return this.cartesianPixelWidth;
     }
 
     public getCenter(): LatLng {
         return this.center;
     }
 
-    public getCartesianMeasureValue(widthInKm: number = Converter.CARTESIAN_WIDTH): ICartesianMeasureValue {
+    public getCartesianMeasureValue(widthInKm: number = Converter.CARTESIAN_WIDTH_IN_KM, rounded = true): ICartesianMeasureValue {
 
-        const azimuthPrecision = this.azimuthDelta / Converter.POLAR_PRECISION;
+        if (this.lastCartesianMeasureValueComputed) {
+            return this.lastCartesianMeasureValueComputed;
+        }
+
         const measureValuePolarContainers = this.polarMeasureValue.getPolars();
 
-        const widthOfPixelInMeters = 100 * 1000 * CartesianQuality.DEFAULT_SCALE;
+        const widthOfPixelInMeters = 100000 * CartesianQuality.DEFAULT_SCALE;
+        const groupWidth = Math.sqrt(Converter.CARTESIAN_GROUP_BY);
 
-        // Build XY structure => {count, values}
+        // Build XY structure => {count, sum(values)}
         const subCartesianValues = {};
+        let maxX = 0;
+        let maxY = 0;
         for (const measureValuePolarContainer of measureValuePolarContainers) {
             const azimuth = measureValuePolarContainer.azimuth;
             const polarDistance = measureValuePolarContainer.distance;
             const distancePrecision = polarDistance / Converter.POLAR_PRECISION;
             for (const [index, edgeValue] of measureValuePolarContainer.polarEdges.entries()) {
                 const distance = polarDistance * (index + 1);
+                const azimuthPrecision = this.azimuthDelta * (measureValuePolarContainer.polarEdges.length - index) +
+                    this.azimuthDelta / Converter.POLAR_PRECISION * (index);
 
                 for (let subAzimuth = azimuth; subAzimuth < azimuth + this.azimuthDelta; subAzimuth += azimuthPrecision) {
                     for (let subDistance = distance; subDistance < distance + polarDistance; subDistance += distancePrecision) {
+                        const {x, y} = Converter.GetXYFromPolar(subAzimuth, subDistance, widthOfPixelInMeters, groupWidth);
+                        const key = 'x' + x + 'y' + y;
+                        maxX = Math.max(maxX, x);
+                        maxY = Math.max(maxY, y);
+                        if (!subCartesianValues[key]) {
+                            subCartesianValues[key] = [];
+                        }
+                        subCartesianValues[key].push(edgeValue);
+                    }
+                }
+            }
+        }
+
+        if (Object.keys(subCartesianValues).length < 3000) {
+            Converter.LogSubValuesGrouped(this.center, subCartesianValues, maxX, maxY);
+        }
+
+        // compute cartesianPixelXWidth
+        const point1 = Converter.GetLatLngFromDistances(this.center, 0, 0);
+        const point2 = Converter.GetLatLngFromDistances(this.center, widthOfPixelInMeters, 0);
+        const point3 = Converter.GetLatLngFromDistances(this.center, 0, widthOfPixelInMeters);
+        this.setCartesianPixelWidth(Math.abs(point1.lat - point3.lat), Math.abs(point1.lng - point2.lng));
+
+        // On each pixel of the map, ungroup values using XY structure
+        const cartesianValues = [];
+        const latLngAlreadyDone = {};
+        const widthOfCartesianPixel = widthOfPixelInMeters; // TODO / 2
+        for (let mX = -widthInKm * 1000; mX <= widthInKm * 1000; mX += widthOfCartesianPixel) {
+            for (let mY = -widthInKm * 1000; mY <= widthInKm * 1000; mY += widthOfCartesianPixel) {
+                const keyX = Math.round((mX / widthOfPixelInMeters) / groupWidth);
+                const keyY = Math.round((mY / widthOfPixelInMeters) / groupWidth);
+                const key = 'x' + keyX + 'y' + keyY;
+                const subs = subCartesianValues[key];
+
+                let value = 0;
+                if (subs) {
+                    const xInTheGroup = Math.abs(Math.round(mX / widthOfPixelInMeters)) % groupWidth;
+                    const yInTheGroup = Math.abs(Math.round(mY / widthOfPixelInMeters)) % groupWidth;
+                    value = Converter.GetValueOfGroup(subs, groupWidth, xInTheGroup, yInTheGroup);
+                }
+
+                const point = Converter.GetLatLngFromDistances(this.center, mX, mY);
+                if (rounded) {
+                    point.rounded(this.getCartesianPixelWidth());
+                }
+
+                const alreadyDoneKey = 'lat' + point.lat + 'lng' + point.lng;
+                if (!latLngAlreadyDone[alreadyDoneKey]) {
+                    cartesianValues.push(new CartesianValue(value, point.lat, point.lng));
+                    latLngAlreadyDone[alreadyDoneKey] = true;
+                } else {
+                    // console.warn('bypass?', value, 'vs', latLngAlreadyDone[alreadyDoneKey]);
+                }
+            }
+        }
+
+        this.lastCartesianMeasureValueComputed = new CartesianMeasureValue(cartesianValues);
+        return this.lastCartesianMeasureValueComputed;
+    }
+
+    public getCartesianMeasureValueV2(widthInKm: number = Converter.CARTESIAN_WIDTH_IN_KM): ICartesianMeasureValue {
+
+        const azimuthPrecision = this.azimuthDelta / Converter.POLAR_PRECISION;
+        const measureValuePolarContainers = this.polarMeasureValue.getPolars();
+
+        const scale = this.cartesianPixelWidth.lat;
+        const widthOfPixelInMeters = 100 * 1000 * scale;
+
+        // Build XY structure => {count, sum(values)}
+        const subCartesianValues = {};
+        let maxX = 0;
+        let maxY = 0;
+        for (const measureValuePolarContainer of measureValuePolarContainers) {
+            const azimuth = measureValuePolarContainer.azimuth;
+            const polarDistance = measureValuePolarContainer.distance;
+            const distancePrecision = polarDistance / Converter.POLAR_PRECISION;
+            for (const [index, edgeValue] of measureValuePolarContainer.polarEdges.entries()) {
+                const distance = polarDistance * (index + 1);
+                // i=0 => azimuthDelta
+                // i=polarEdges.length => this.azimuthDelta / Converter.POLAR_PRECISION
+                const azimuthPrecision2 = this.azimuthDelta * (measureValuePolarContainer.polarEdges.length - index) +
+                    this.azimuthDelta / Converter.POLAR_PRECISION * (index);
+
+                for (let subAzimuth = azimuth; subAzimuth < azimuth + this.azimuthDelta; subAzimuth += azimuthPrecision2) {
+                    for (let subDistance = distance; subDistance < distance + polarDistance; subDistance += distancePrecision) {
                         const {x, y} = Converter.GetXYFromPolar(subAzimuth, subDistance, widthOfPixelInMeters);
                         const key = 'x' + x + 'y' + y;
+                        maxX = Math.max(maxX, x);
+                        maxY = Math.max(maxY, y);
 
                         const count = subCartesianValues[key] ? subCartesianValues[key].count + 1 : 1;
                         const value = subCartesianValues[key] ? subCartesianValues[key].value + edgeValue : edgeValue;
@@ -196,43 +412,72 @@ export class Converter {
         }
 
         // Verify that we are realistic
-        const keysCount = Object.keys(subCartesianValues).length;
-        const matrixCount = Math.pow(Math.round((2 * widthInKm + 1) * 1000 / widthOfPixelInMeters), 2);
-        const sRatio = keysCount / matrixCount;
-        const sMaxRatio = 3.14 / 4;
-        if (sRatio < sMaxRatio) {
-            console.warn('>> raain-quality ### not realistic sampling', keysCount, matrixCount, sRatio, sMaxRatio);
+        if (true) {
+            const subKeys = Object.keys(subCartesianValues);
+            // const subKeysSorted = subKeys.sort((a, b) => a.localeCompare(b));
+            const keysCount = subKeys.length;
+            if (keysCount < 3000) {
+                Converter.LogSubValues(subCartesianValues, maxX, maxY);
+            }
+            const matrixCount = Math.pow(Math.round((2 * widthInKm + 1) * 1000 / widthOfPixelInMeters), 2);
+            const sRatio = keysCount / matrixCount;
+            const sMaxRatio = 3.14 / 4;
+            if (sRatio < sMaxRatio) {
+                console.warn('>> raain-quality ### not realistic sampling', keysCount, matrixCount, sRatio, sMaxRatio);
+            }
         }
 
         // On each pixel of the map, compute value using XY structure
+        let issues = 0, issuesWithSameValue = 0;
         const cartesianValues = [];
+        const pixels = {};
         for (let mX = -widthInKm * 1000; mX <= widthInKm * 1000; mX += widthOfPixelInMeters) {
             for (let mY = -widthInKm * 1000; mY <= widthInKm * 1000; mY += widthOfPixelInMeters) {
                 const key = 'x' + Math.round(mX / widthOfPixelInMeters) + 'y' + Math.round(mY / widthOfPixelInMeters);
                 const sub = subCartesianValues[key];
                 const value = sub?.count ? sub.value / sub.count : 0;
                 const point = Converter.GetLatLngFromDistances(this.center, mX, mY);
-                cartesianValues.push(new CartesianValue(value,
-                    QualityTools.roundLatLng(point.lat, CartesianQuality.DEFAULT_SCALE, true),
-                    QualityTools.roundLatLng(point.lng, CartesianQuality.DEFAULT_SCALE, true)));
+                if (false) {
+                    const lat = QualityTools.roundLatLng(point.lat, scale, true);
+                    const lng = QualityTools.roundLatLng(point.lng, scale, true);
+                    const pixelId = 'lat' + lat + 'lng' + lng;
+                    const alreadyAddedValue = pixels[pixelId];
+                    if (!alreadyAddedValue) {
+                        cartesianValues.push(new CartesianValue(value, lat, lng));
+                        pixels[pixelId] = value;
+                    } else {
+                        issues++;
+                        if (alreadyAddedValue === value) {
+                            issuesWithSameValue++;
+                        } else {
+                            //  console.log(value, alreadyAddedValue);
+                        }
+                    }
+                } else {
+                    cartesianValues.push(new CartesianValue(value, point.lat, point.lng));
+                }
             }
         }
 
+        // console.warn('issues ?', issues, 'issuesWithSameValue?', issuesWithSameValue, 'in', cartesianValues.length);
         return new CartesianMeasureValue(cartesianValues);
     }
 
-    public getCartesianMeasureValueV1(widthInKm: number = 250): ICartesianMeasureValue {
+    public getCartesianMeasureValueV1(widthInKm: number = Converter.CARTESIAN_WIDTH_IN_KM): ICartesianMeasureValue {
         const cartesianValues = [];
+        const scale = CartesianQuality.DEFAULT_SCALE;
+        const widthOfPixelInMeters = 100 * 1000 * scale;
 
-        for (let kmX = -widthInKm; kmX <= widthInKm; kmX++) {
-            for (let kmY = -widthInKm; kmY <= widthInKm; kmY++) {
+        for (let mX = -widthInKm * 1000; mX <= widthInKm * 1000; mX += widthOfPixelInMeters) {
+            for (let mY = -widthInKm * 1000; mY <= widthInKm * 1000; mY += widthOfPixelInMeters) {
 
-                const point = Converter.GetLatLngFromDistances(this.center, kmX * 1000, kmY * 1000);
+                const point = Converter.GetLatLngFromDistances(this.center, mX, mY);
                 const cartesianValue = this.toCartesianV1(point);
                 const mapValue = new CartesianValue(
                     cartesianValue.value,
-                    QualityTools.roundLatLng(cartesianValue.lat, this.width.lat, true),
-                    QualityTools.roundLatLng(cartesianValue.lng, this.width.lat, true));
+                    cartesianValue.lat, // QualityTools.roundLatLng(cartesianValue.lat, this.width.lat, true),
+                    cartesianValue.lng, // QualityTools.roundLatLng(cartesianValue.lng, this.width.lat, true)
+                );
                 cartesianValues.push(mapValue);
             }
         }
@@ -248,7 +493,7 @@ export class Converter {
         }
 
         // get the nearest LatLng square points
-        const p1p2p3p4 = Converter.CartesianSquare(point, this.width);
+        const p1p2p3p4 = Converter.ComputeCartesianSquare(point, this.cartesianPixelWidth);
 
         // get the polar equivalent from square points
         const a_1 = getRhumbLineBearing(this.center, p1p2p3p4.p1);
@@ -342,4 +587,19 @@ export class Converter {
         return new CartesianValue(value, point.lat, point.lng);
     }
 
+    public setCartesianPixelWidth(lat: number, lng: number) {
+        lat = Math.round(lat * 100000) / 100000;
+        lng = Math.round(lng * 100000) / 100000;
+        this.cartesianPixelWidth = new LatLng(lat, lng);
+    }
+
+    protected logCartesianValues() {
+        if (!this.lastCartesianMeasureValueComputed) {
+            return;
+        }
+
+        const cartesianValues = this.lastCartesianMeasureValueComputed.getCartesianValues();
+        // const cartesianPixelWidth = this.getCartesianPixelWidth();
+        QualityTools.logCartesianValues(cartesianValues);
+    }
 }

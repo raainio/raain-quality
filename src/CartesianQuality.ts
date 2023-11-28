@@ -9,31 +9,37 @@ import {Converter} from './tools/Converter';
 import {Animation} from 'termination';
 import {PassThrough} from 'node:stream';
 import {Console} from 'node:console';
+import {SpeedMatrix} from './tools/SpeedMatrix';
+import {LatLng} from './tools/LatLng';
 
 export class CartesianQuality {
 
     // scale of Pixel regarding LatLng : 1 => 100km, 0.01 => 1km, 0.005 => 500m
-    public static DEFAULT_SCALE = 0.005;
+    public static DEFAULT_SCALE = 0.01;
     // Filter : [-30mn +5mn]
-    private static FILTER_PERIOD_START_MN = -30;    // <=== TODO PLAY
+    private static FILTER_PERIOD_START_MN = -0;    // <=== TODO PLAY
     private static FILTER_PERIOD_END_MN = +5;       // <=== TODO PLAY
 
     private rainComputationQualities: { rainComputationQuality: RainComputationQuality, date: Date }[];
 
     constructor(
         protected cartesianRainHistories: CartesianRainHistory[],
-        protected cartesianGaugeHistories: CartesianGaugeHistory[]
+        protected cartesianGaugeHistories: CartesianGaugeHistory[],
+        protected cartesianPixelWidth: LatLng = new LatLng(CartesianQuality.DEFAULT_SCALE, CartesianQuality.DEFAULT_SCALE),
     ) {
         this.rainComputationQualities = [];
     }
 
-    public static createFromJson(json): CartesianQuality {
-        const created = new CartesianQuality([], []);
+    public static CreateFromJson(json): CartesianQuality {
+        const created = new CartesianQuality([], [], new LatLng(CartesianQuality.DEFAULT_SCALE, CartesianQuality.DEFAULT_SCALE));
         if (json.cartesianRainHistories) {
             created.cartesianRainHistories = json.cartesianRainHistories;
         }
         if (json.cartesianGaugeHistories) {
             created.cartesianGaugeHistories = json.cartesianGaugeHistories;
+        }
+        if (json.cartesianPixelWidth) {
+            created.cartesianPixelWidth = json.cartesianPixelWidth;
         }
         return created;
     }
@@ -53,7 +59,6 @@ export class CartesianQuality {
             === historyDate.getTime()) {
             dates.maxDate = historyDate;
         }
-
 
         if (!dates.stepInSec) {
             let stepInSec = 0;
@@ -78,12 +83,8 @@ export class CartesianQuality {
 
 
     public getRainDates(): Date[] {
-
         const rainHistoriesGroupByDate = CartesianQuality.groupBy(this.cartesianRainHistories, v => v.periodBegin.getTime());
-
-        const dates = Object.keys(rainHistoriesGroupByDate).map(d => new Date(parseInt(d, 10)));
-
-        return dates;
+        return Object.keys(rainHistoriesGroupByDate).map(d => new Date(parseInt(d, 10)));
     }
 
     public async getRainComputationQuality(dateToEvaluate: Date): Promise<RainComputationQuality> {
@@ -94,19 +95,17 @@ export class CartesianQuality {
             return qualitiesFromDate[0].rainComputationQuality;
         }
 
-        // Filtering on the period
+        // Filtering on the period TODO and null values ?
         const rainPeriodBegin = new Date(dateToEvaluate.getTime() + CartesianQuality.FILTER_PERIOD_START_MN * 60000);
         const gaugePeriodEnd = new Date(dateToEvaluate.getTime() + CartesianQuality.FILTER_PERIOD_END_MN * 60000);
         const cartesianRainHistories = this.cartesianRainHistories
             .filter(crh => {
-                return crh.computedValue.value &&
-                    rainPeriodBegin.getTime() <= crh.periodBegin.getTime() &&
+                return rainPeriodBegin.getTime() <= crh.periodBegin.getTime() &&
                     crh.periodBegin.getTime() <= dateToEvaluate.getTime();
             });
         const cartesianGaugeHistories = this.cartesianGaugeHistories
             .filter(cgh => {
-                return cgh.value.value &&
-                    rainPeriodBegin.getTime() <= new Date(cgh.date).getTime() &&
+                return rainPeriodBegin.getTime() <= new Date(cgh.date).getTime() &&
                     new Date(cgh.date).getTime() <= gaugePeriodEnd.getTime();
             });
 
@@ -134,23 +133,29 @@ export class CartesianQuality {
 
         const gaugeHistories = cartesianGaugeHistories
             .map(gh => {
-                const position = Converter.MapLatLngToPosition(gh.value, true);
+                const position = Converter.MapLatLngToPosition(gh.value, true, this.cartesianPixelWidth);
                 return new PositionHistory(gh.gaugeId, new Date(gh.date), position.x, position.y, gh.value.value);
             });
         const rainHistories = cartesianRainHistories
             .map((rh, index) => {
                 CartesianQuality.storeDates(dates, rh);
-                const position = Converter.MapLatLngToPosition(rh.computedValue, true);
+                const position = Converter.MapLatLngToPosition(rh.computedValue, true, this.cartesianPixelWidth);
                 return new PositionHistory('rain' + index,
                     new Date(rh.periodBegin),
                     position.x, position.y,
                     rh.computedValue.value);
             });
 
-        const periodMinutes = Math.round((dates.maxDate?.getTime() - dates.minDate?.getTime()) / 60000);
+        const periodMinutes = Math.round(((dates.maxDate?.getTime() + dates.stepInSec * 1000) - dates.minDate?.getTime()) / 60000);
         const periodCount = Math.round(periodMinutes * 60 / dates.stepInSec);
+        if (periodCount <= 0) {
+            console.warn('>> raain-quality ### no period ', dates, '=> impossible to compute quality');
+            rainComputationQuality['id'] = 'no period';
+            return rainComputationQuality;
+        }
 
-        const speedComputing = new SpeedComputing(rainHistories, gaugeHistories);
+        const speedComputing = new SpeedComputing(rainHistories, gaugeHistories,
+            SpeedMatrix.DEFAULT_MATRIX_RANGE, this.cartesianPixelWidth);
         const speedMatrix = speedComputing.computeSpeedMatrix(dates.maxDate, {periodCount, periodMinutes});
         if (!speedMatrix) {
             throw new Error('impossible to compute Quality Speed Matrix');
@@ -266,7 +271,7 @@ export class CartesianQuality {
             animation.start();
             cradleFramesTransition.run();
         } else {
-            logger.log(animationsObject);
+            console.log(animationsObject);
         }
     }
 }

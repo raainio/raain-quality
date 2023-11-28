@@ -15,4 +15,14 @@ export class Position {
         }
         return set;
     }
+
+    setPrecision(precision: number = 5) {
+        const tenPower = Math.pow(10, precision);
+        this.x = Math.round(this.x * tenPower) / tenPower;
+        this.y = Math.round(this.y * tenPower) / tenPower;
+    }
+
+    samePosition(p: Position) {
+        return this.x === p.x && this.y === p.y;
+    }
 }
